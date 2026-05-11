@@ -39,12 +39,16 @@ body { background: #f6f4ef; font-family: -apple-system, BlinkMacSystemFont, "Seg
 .g-score .val { font-size: 15px; font-weight: 700; color: #fff; }
 .g-coins { display: flex; align-items: center; gap: 3px; background: rgba(255,255,255,0.1); padding: 2px 7px; border-radius: 8px; }
 .g-coins span { color: #ffd700; font-size: 12px; font-weight: 600; }
-.g-board { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; width: 240px; height: 240px; margin: 4px auto; background: rgba(255,255,255,0.05); border-radius: 8px; padding: 3px; }
-.g-cell { border-radius: 3px; background: rgba(255,255,255,0.08); }
+.g-board { display: grid; grid-template-columns: repeat(10, 1fr); gap: 1px; width: 240px; height: 240px; margin: 4px auto; background: rgba(255,255,255,0.05); border-radius: 8px; padding: 3px; }
+.g-cell { border-radius: 2px; background: rgba(255,255,255,0.08); cursor: pointer; transition: background 0.1s; }
 .g-cell.f1 { background: #ef4444; } .g-cell.f2 { background: #f59e0b; }
 .g-cell.f3 { background: #10b981; } .g-cell.f4 { background: #3b82f6; }
 .g-cell.f5 { background: #8b5cf6; } .g-cell.f6 { background: #ec4899; }
 .g-cell.f7 { background: #06b6d4; }
+.g-cell.preview { background: rgba(255,255,255,0.25); }
+.g-cell.preview-invalid { background: rgba(239,68,68,0.3); }
+.g-shape.selected { background: rgba(79,70,229,0.3); box-shadow: 0 0 0 2px #4f46e5; }
+.g-cell.bomb-target { background: rgba(255,200,0,0.4); }
 .g-combo { text-align: center; padding: 4px; opacity: 0; transition: opacity 0.3s; }
 .g-combo.vis { opacity: 1; }
 .g-combo-txt { font-size: 13px; font-weight: 800; color: #ffd700; }
@@ -304,124 +308,231 @@ body { background: #f6f4ef; font-family: -apple-system, BlinkMacSystemFont, "Seg
 </nav>
 
 <script>
-// 游戏状态
+const SZ = 10;
+const SHAPES = [
+  [[1]],
+  [[1],[1,1]],[[0,1],[1,1]],[[1,1],[0,1]],[[1,1],[1]],
+  [[1,1,1],[1]],[[1,1],[0,1],[0,1]],[[0,0,1],[1,1,1]],[[1],[1],[1,1]],
+  [[1,1,1],[0,0,1]],[[0,1],[0,1],[1,1]],[[1],[1,1,1]],[[1,1],[1],[1]],
+  [[1,1,1],[1],[1]],[[1,1,1],[0,0,1],[0,0,1]],[[0,0,1],[0,0,1],[1,1,1]],[[1],[1],[1,1,1]],
+  [[1,1]],[[1],[1]],
+  [[1,1,1]],[[1],[1],[1]],
+  [[1,1,1,1]],[[1],[1],[1],[1]],
+  [[1,1,1,1,1]],[[1],[1],[1],[1],[1]],
+  [[1,1],[1,1]],
+  [[1,1],[1,1],[1,1]],[[1,1,1],[1,1,1]],[[1,1,1],[1,1,1],[1,1,1]],
+  [[1,1,1],[0,1]],[[0,1],[1,1],[0,1]],[[0,1],[1,1,1]],[[1],[1,1],[1]],
+  [[1,1],[0,1,1]],[[0,1],[1,1],[1]],[[0,1,1],[1,1]],[[1],[1,1],[0,1]]
+];
+const COLORS = ['#ef4444','#f59e0b','#10b981','#3b82f6','#8b5cf6','#ec4899','#06b6d4'];
+const CNAMES = ['f1','f2','f3','f4','f5','f6','f7'];
+
+function trimShape(m) {
+  const rows = m.length, cols = Math.max(...m.map(r => r.length));
+  const full = m.map(r => { const a = [...r]; while(a.length < cols) a.push(0); return a; });
+  return full;
+}
+function randShape() {
+  const idx = Math.floor(Math.random() * SHAPES.length);
+  const ci = Math.floor(Math.random() * 7);
+  return { matrix: trimShape(SHAPES[idx]), color: ci + 1, used: false };
+}
+function gen3() { return [randShape(), randShape(), randShape()]; }
+
 window.gs = {
-  gameStatus: 'playing', errState: 'normal', score: 1280, bestScore: 3560, coins: 450,
-  comboCount: 0, userType: 'casual', board: [],
-  pendingShapes: [
-    { matrix: [[1,1,1],[0,0,1]], color: 3, used: false },
-    { matrix: [[1,1],[1,0]], color: 5, used: false },
-    { matrix: [[1],[1],[1],[1]], color: 7, used: false }
-  ],
-  boosters: { bomb: 3, gravity: 3, refresh: 3 }
+  gameStatus:'playing', errState:'normal', score:0, bestScore:0, coins:100,
+  comboCount:0, userType:'casual', board:[], selectedShape:-1, bombMode:false,
+  pendingShapes: gen3(),
+  boosters:{bomb:3,gravity:3,refresh:3}
 };
 
 function initGBoard() {
+  gs.board = Array.from({length:SZ}, ()=>Array(SZ).fill(0));
   if (gs.userType === 'casual') {
-    gs.board = [[0,0,0,1,2,0,3,4],[0,0,1,1,0,0,0,4],[0,0,0,0,5,5,0,0],[6,6,0,0,5,0,0,7],[6,0,0,0,0,0,0,7],[0,0,2,2,2,0,0,7],[3,3,3,0,0,4,4,0],[1,1,1,1,1,1,1,0]];
+    const pre = [[0,0,0,0,1,2,0,3,0,4],[0,0,1,0,1,0,0,0,4,0],[0,0,0,0,0,5,5,0,0,0],[0,6,6,0,0,5,0,0,7,0],[0,6,0,0,0,0,0,0,7,0],[0,0,0,2,2,2,0,0,7,0],[0,3,3,3,0,0,4,4,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0]];
+    gs.board = pre;
   } else {
-    gs.board = [[1,2,3,1,2,0,3,4],[5,6,1,1,7,2,3,4],[4,3,2,5,5,5,6,7],[6,6,1,2,5,3,4,7],[6,7,3,4,2,1,5,7],[1,2,2,2,2,6,3,7],[3,3,3,5,6,4,4,1],[1,1,1,1,1,1,1,0]];
-    gs.score = 4820; gs.coins = 120; gs.comboCount = 3;
+    const pre = [[1,2,3,1,2,0,3,4,5,6],[5,6,1,1,7,2,3,4,0,2],[4,3,2,5,5,5,6,7,1,0],[6,6,1,2,5,3,4,7,2,3],[6,7,3,4,2,1,5,7,0,4],[1,2,2,2,2,6,3,7,5,0],[3,3,3,5,6,4,4,1,0,2],[1,2,0,4,5,6,7,1,3,0],[0,5,3,2,1,0,6,4,7,1],[2,0,1,3,0,5,0,2,4,6]];
+    gs.board = pre; gs.score = 4820; gs.coins = 120; gs.comboCount = 3;
   }
 }
 
-// 切换台交互
+function canPlace(shape, br, bc) {
+  const m = shape.matrix;
+  for (let r=0;r<m.length;r++) for (let c=0;c<m[0].length;c++) {
+    if (!m[r][c]) continue;
+    const nr=br+r, nc=bc+c;
+    if (nr<0||nr>=SZ||nc<0||nc>=SZ||gs.board[nr][nc]>0) return false;
+  }
+  return true;
+}
+function canPlaceAnywhere(shape) {
+  for (let r=0;r<SZ;r++) for (let c=0;c<SZ;c++) if (canPlace(shape,r,c)) return true;
+  return false;
+}
+function checkGameOver() {
+  for (const sh of gs.pendingShapes) { if (!sh.used && canPlaceAnywhere(sh)) return false; }
+  return true;
+}
+function placeShape(shape, br, bc) {
+  const m = shape.matrix;
+  for (let r=0;r<m.length;r++) for (let c=0;c<m[0].length;c++) {
+    if (m[r][c]) gs.board[br+r][bc+c] = shape.color;
+  }
+  gs.score += m.flat().filter(v=>v).length;
+}
+
+function rCheckClear() {
+  let lines = 0;
+  for (let r=0;r<SZ;r++) if (gs.board[r].every(v=>v>0)) { gs.board[r]=Array(SZ).fill(0); lines++; }
+  for (let c=0;c<SZ;c++) if (gs.board.every(row=>row[c]>0)) { gs.board.forEach(row=>row[c]=0); lines++; }
+  if (lines > 0) {
+    gs.comboCount++;
+    const pts = lines * 10 * (1 + gs.comboCount * 0.5);
+    gs.score += Math.floor(pts);
+    gs.coins += lines * 5;
+    rToast(`消除 ${lines} 行！Combo x${gs.comboCount}`);
+  } else { gs.comboCount = 0; }
+  return lines;
+}
+
+// 切换台
 function rSelect(el, groupId) {
-  document.querySelectorAll(`#${groupId} .s-chip`).forEach(c => c.classList.remove('active'));
+  document.querySelectorAll(`#${groupId} .s-chip`).forEach(c=>c.classList.remove('active'));
   el.classList.add('active');
 }
-function rSelectUser(el, type) {
-  rSelect(el, 'rUserChips'); gs.userType = type;
-  if (type === 'hardcore') { gs.score = 4820; gs.coins = 120; gs.comboCount = 3; }
-  else { gs.score = 1280; gs.coins = 450; gs.comboCount = 0; }
-}
-function rSelectStatus(el, status) { rSelect(el, 'rStatusChips'); gs.gameStatus = status; }
-function rSelectCombo(el, n) { rSelect(el, 'rComboChips'); gs.comboCount = n; }
-function rSelectErr(el, s) { rSelect(el, 'rStateChips'); gs.errState = s; }
-function rApply() { initGBoard(); rRender(); }
+function rSelectUser(el, type) { rSelect(el,'rUserChips'); gs.userType=type; if(type==='hardcore'){gs.score=4820;gs.coins=120;gs.comboCount=3;}else{gs.score=0;gs.coins=100;gs.comboCount=0;} }
+function rSelectStatus(el, s) { rSelect(el,'rStatusChips'); gs.gameStatus=s; }
+function rSelectCombo(el, n) { rSelect(el,'rComboChips'); gs.comboCount=n; }
+function rSelectErr(el, s) { rSelect(el,'rStateChips'); gs.errState=s; }
+function rApply() { gs.selectedShape=-1; gs.bombMode=false; initGBoard(); gs.pendingShapes=gen3(); rRender(); }
 
 function rToast(text) {
-  const t = document.getElementById('rToast');
-  if (t) { t.textContent = text; t.classList.add('vis'); setTimeout(() => t.classList.remove('vis'), 2000); }
+  const t=document.getElementById('rToast');
+  if(t){t.textContent=text;t.classList.add('vis');setTimeout(()=>t.classList.remove('vis'),2000);}
 }
 
 function rRender() {
-  const screen = document.getElementById('rPhone');
+  const screen=document.getElementById('rPhone');
+  if(gs.errState==='empty'){screen.innerHTML=`<div class="g-header"><div class="g-score"><div class="lbl">分数</div><div class="val">0</div></div><div class="g-coins">🪙 <span>0</span></div><div class="g-score"><div class="lbl">最高分</div><div class="val">0</div></div></div><div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:300px;color:rgba(255,255,255,0.4);"><div style="font-size:40px;margin-bottom:10px;">🧩</div><div style="font-size:13px;">点击开始游戏</div><button onclick="rStartGame()" style="margin-top:14px;padding:10px 28px;background:#4f46e5;color:#fff;border:none;border-radius:10px;font-size:13px;cursor:pointer;">开始游戏</button></div><div class="g-toast" id="rToast"></div>`;return;}
+  if(gs.errState==='loading'){screen.innerHTML=`<div class="g-header"><div class="g-score"><div class="lbl">分数</div><div class="val">---</div></div><div class="g-coins">🪙 <span>---</span></div><div class="g-score"><div class="lbl">最高分</div><div class="val">---</div></div></div><div style="position:relative;height:300px;display:flex;align-items:center;justify-content:center;"><div style="width:36px;height:36px;border:3px solid rgba(255,255,255,0.2);border-top-color:#4f46e5;border-radius:50%;animation:spin 0.8s linear infinite;"></div></div><div style="text-align:center;color:rgba(255,255,255,0.5);font-size:12px;">加载游戏资源中...</div><div class="g-toast" id="rToast"></div>`;return;}
+  if(gs.errState==='error'){screen.innerHTML=`<div class="g-header"><div class="g-score"><div class="lbl">分数</div><div class="val">${gs.score}</div></div><div class="g-coins">🪙 <span>${gs.coins}</span></div><div class="g-score"><div class="lbl">最高分</div><div class="val">${gs.bestScore}</div></div></div><div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px;text-align:center;"><div style="font-size:40px;margin-bottom:10px;">⚠️</div><div style="font-size:14px;font-weight:600;color:#ef4444;margin-bottom:6px;">游戏数据加载失败</div><div style="font-size:12px;color:rgba(255,255,255,0.5);margin-bottom:14px;">本地存储数据损坏</div><button onclick="rRestart()" style="padding:9px 18px;background:#4f46e5;color:#fff;border:none;border-radius:8px;font-size:12px;cursor:pointer;">重新开始</button></div><div class="g-toast" id="rToast"></div>`;return;}
 
-  if (gs.errState === 'empty') {
-    screen.innerHTML = `<div class="g-header"><div class="g-score"><div class="lbl">分数</div><div class="val">0</div></div><div class="g-coins">🪙 <span>0</span></div><div class="g-score"><div class="lbl">最高分</div><div class="val">0</div></div></div><div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:300px;color:rgba(255,255,255,0.4);"><div style="font-size:40px;margin-bottom:10px;">🧩</div><div style="font-size:13px;">点击开始游戏</div><button onclick="rStartGame()" style="margin-top:14px;padding:10px 28px;background:#4f46e5;color:#fff;border:none;border-radius:10px;font-size:13px;cursor:pointer;">开始游戏</button></div><div class="g-toast" id="rToast"></div>`;
-    return;
-  }
-  if (gs.errState === 'loading') {
-    screen.innerHTML = `<div class="g-header"><div class="g-score"><div class="lbl">分数</div><div class="val">---</div></div><div class="g-coins">🪙 <span>---</span></div><div class="g-score"><div class="lbl">最高分</div><div class="val">---</div></div></div><div style="position:relative;height:300px;display:flex;align-items:center;justify-content:center;"><div style="width:36px;height:36px;border:3px solid rgba(255,255,255,0.2);border-top-color:#4f46e5;border-radius:50%;animation:spin 0.8s linear infinite;"></div></div><div style="text-align:center;color:rgba(255,255,255,0.5);font-size:12px;">加载游戏资源中...</div><div class="g-toast" id="rToast"></div>`;
-    return;
-  }
-  if (gs.errState === 'error') {
-    screen.innerHTML = `<div class="g-header"><div class="g-score"><div class="lbl">分数</div><div class="val">${gs.score}</div></div><div class="g-coins">🪙 <span>${gs.coins}</span></div><div class="g-score"><div class="lbl">最高分</div><div class="val">${gs.bestScore}</div></div></div><div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px;text-align:center;"><div style="font-size:40px;margin-bottom:10px;">⚠️</div><div style="font-size:14px;font-weight:600;color:#ef4444;margin-bottom:6px;">游戏数据加载失败</div><div style="font-size:12px;color:rgba(255,255,255,0.5);margin-bottom:14px;">本地存储数据损坏，请重新开始</div><button onclick="rRestart()" style="padding:9px 18px;background:#4f46e5;color:#fff;border:none;border-radius:8px;font-size:12px;cursor:pointer;">重新开始</button></div><div class="g-toast" id="rToast"></div>`;
-    return;
-  }
-
-  // 正常态
-  let bHTML = '';
-  for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
-    const v = gs.board[r][c];
-    bHTML += `<div class="g-cell ${v > 0 ? 'f'+v : ''}" onclick="rCellClick(${r},${c})"></div>`;
+  let bHTML='';
+  for(let r=0;r<SZ;r++) for(let c=0;c<SZ;c++){
+    const v=gs.board[r][c];
+    let cls='g-cell';
+    if(v>0) cls+=' '+CNAMES[v-1];
+    if(gs.bombMode && r>=gs.bombR-1 && r<=gs.bombR+1 && c>=gs.bombC-1 && c<=gs.bombC+1) cls+=' bomb-target';
+    else if(gs.selectedShape>=0 && !gs.pendingShapes[gs.selectedShape].used){
+      const sh=gs.pendingShapes[gs.selectedShape];
+      const m=sh.matrix, hr=Math.floor(m.length/2), hc=Math.floor(m[0].length/2);
+      const br=r-hr, bc=c-hc; // not used for preview; we check if this cell is part of preview
+    }
+    bHTML+=`<div class="${cls}" onmouseenter="rHover(${r},${c})" onclick="rCellClick(${r},${c})"></div>`;
   }
 
-  const colors = ['','#ef4444','#f59e0b','#10b981','#3b82f6','#8b5cf6','#ec4899','#06b6d4'];
-  let shapesHTML = gs.pendingShapes.map((sh, i) => {
-    const cols = sh.matrix[0].length;
-    let cells = '';
-    sh.matrix.forEach(row => row.forEach(v => { cells += `<div class="g-shape-cell ${v ? 'sf' : ''}" style="color:${colors[sh.color]}"></div>`; }));
-    return `<div class="g-shape ${sh.used ? 'used' : ''}" onclick="rShapeClick(${i})"><div class="g-shape-grid" style="grid-template-columns:repeat(${cols},1fr);">${cells}</div></div>`;
+  const colors=['','#ef4444','#f59e0b','#10b981','#3b82f6','#8b5cf6','#ec4899','#06b6d4'];
+  let shapesHTML=gs.pendingShapes.map((sh,i)=>{
+    const cols=sh.matrix[0].length; let cells='';
+    sh.matrix.forEach(row=>{for(let c=0;c<cols;c++) cells+=`<div class="g-shape-cell ${(row[c]||0)?'sf':''}" style="color:${colors[sh.color]}"></div>`;});
+    const sel=(!sh.used && gs.selectedShape===i)?'selected':'';
+    return `<div class="g-shape ${sh.used?'used':''} ${sel}" onclick="rShapeClick(${i})"><div class="g-shape-grid" style="grid-template-columns:repeat(${cols},1fr);">${cells}</div></div>`;
   }).join('');
 
-  screen.innerHTML = `
+  const helpText = gs.selectedShape>=0 ? '<div style="text-align:center;font-size:9px;color:rgba(255,255,255,0.4);padding:2px;">点击棋盘放置选中方块</div>' : gs.bombMode ? '<div style="text-align:center;font-size:9px;color:rgba(255,200,0,0.6);padding:2px;">点击棋盘选择炸弹目标</div>' : '';
+
+  screen.innerHTML=`
     <div class="g-header"><div class="g-score"><div class="lbl">分数</div><div class="val">${gs.score}</div></div><div class="g-coins">🪙 <span>${gs.coins}</span></div><div class="g-score"><div class="lbl">最高分</div><div class="val">${gs.bestScore}</div></div></div>
-    <div class="g-combo ${gs.comboCount > 0 ? 'vis' : ''}"><div class="g-combo-txt">🔥 Combo x${gs.comboCount}</div></div>
-    <div class="g-board">${bHTML}</div>
+    <div class="g-combo ${gs.comboCount>0?'vis':''}"><div class="g-combo-txt">🔥 Combo x${gs.comboCount}</div></div>
+    <div class="g-board" onmouseleave="rClearPreview()">${bHTML}</div>
+    ${helpText}
     <div class="g-pending">${shapesHTML}</div>
     <div class="g-boosters">
-      <button class="g-booster" onclick="rUseBomb()"><span class="gi">💣</span><span class="gn">炸弹</span><span class="gc">×${gs.boosters.bomb}</span></button>
-      <button class="g-booster" onclick="rUseGravity()"><span class="gi">⬇️</span><span class="gn">重力</span><span class="gc">×${gs.boosters.gravity}</span></button>
-      <button class="g-booster" onclick="rUseRefresh()"><span class="gi">🔄</span><span class="gn">刷新</span><span class="gc">×${gs.boosters.refresh}</span></button>
+      <button class="g-booster" onclick="rUseBomb()"><span class="gi">💣</span><span class="gn">炸弹 ¢120</span><span class="gc">×${gs.boosters.bomb}</span></button>
+      <button class="g-booster" onclick="rUseGravity()"><span class="gi">⬇️</span><span class="gn">重力 ¢200</span><span class="gc">×${gs.boosters.gravity}</span></button>
+      <button class="g-booster" onclick="rUseRefresh()"><span class="gi">🔄</span><span class="gn">刷新 ¢150</span><span class="gc">×${gs.boosters.refresh}</span></button>
     </div>
-    <div class="g-overlay ${gs.gameStatus === 'gameOver' || gs.gameStatus === 'reviving' ? 'vis' : ''}">
+    <div class="g-overlay ${gs.gameStatus==='gameOver'||gs.gameStatus==='reviving'?'vis':''}">
       <h3>游戏结束</h3><div class="go-s">${gs.score}</div><div class="go-b">最高分：${gs.bestScore}</div>
-      ${gs.gameStatus === 'reviving' ? '<button class="g-btn-rev" onclick="rRevive()">复活继续</button>' : ''}
+      ${gs.gameStatus==='reviving'?'<button class="g-btn-rev" onclick="rRevive()">复活继续</button>':''}
       <button class="g-btn-rst" onclick="rRestart()">重新开始</button>
     </div>
     <div class="g-toast" id="rToast"></div>`;
 }
 
-function rStartGame() { gs.errState = 'normal'; gs.gameStatus = 'playing'; gs.score = 0; gs.coins = 100; initGBoard(); rRender(); rToast('游戏开始！'); }
-function rCellClick(r, c) { if (gs.board[r][c] > 0) rToast(`(${r+1},${c+1}) 已有方块`); }
 function rShapeClick(i) {
-  if (gs.pendingShapes[i].used) return;
-  gs.pendingShapes[i].used = true; gs.score += 10;
-  const sh = gs.pendingShapes[i];
-  const row = Math.floor(Math.random()*5), col = Math.floor(Math.random()*5);
-  sh.matrix.forEach((r,ri) => r.forEach((v,ci) => { if (v && row+ri<8 && col+ci<8) gs.board[row+ri][col+ci] = sh.color; }));
-  if (gs.pendingShapes.every(s => s.used)) {
-    gs.pendingShapes = [
-      { matrix: [[1,1],[1,1]], color: Math.ceil(Math.random()*7), used: false },
-      { matrix: [[1,1,1]], color: Math.ceil(Math.random()*7), used: false },
-      { matrix: [[1],[1],[1]], color: Math.ceil(Math.random()*7), used: false }
-    ];
+  if(gs.pendingShapes[i].used||gs.gameStatus!=='playing') return;
+  gs.bombMode=false;
+  gs.selectedShape = gs.selectedShape===i ? -1 : i;
+  rRender();
+}
+
+function rHover(r,c) {
+  if(gs.gameStatus!=='playing') return;
+  document.querySelectorAll('.g-cell.preview,.g-cell.preview-invalid,.g-cell.bomb-target').forEach(el=>{el.classList.remove('preview','preview-invalid','bomb-target');});
+  if(gs.bombMode) {
+    gs.bombR=r; gs.bombC=c;
+    const cells=document.querySelectorAll('.g-board .g-cell');
+    for(let dr=-1;dr<=1;dr++) for(let dc=-1;dc<=1;dc++){
+      const nr=r+dr,nc=c+dc;
+      if(nr>=0&&nr<SZ&&nc>=0&&nc<SZ) cells[nr*SZ+nc].classList.add('bomb-target');
+    }
+    return;
   }
-  rCheckClear(); rRender();
+  if(gs.selectedShape<0) return;
+  const sh=gs.pendingShapes[gs.selectedShape];
+  if(sh.used) return;
+  const m=sh.matrix, mr=m.length, mc=m[0].length;
+  const br=r-Math.floor(mr/2), bc=c-Math.floor(mc/2);
+  const valid=canPlace(sh,br,bc);
+  const cells=document.querySelectorAll('.g-board .g-cell');
+  for(let dr=0;dr<mr;dr++) for(let dc=0;dc<mc;dc++){
+    if(!m[dr][dc]) continue;
+    const nr=br+dr,nc=bc+dc;
+    if(nr>=0&&nr<SZ&&nc>=0&&nc<SZ) cells[nr*SZ+nc].classList.add(valid?'preview':'preview-invalid');
+  }
 }
-function rCheckClear() {
-  let cl = 0;
-  for (let r = 0; r < 8; r++) if (gs.board[r].every(v => v > 0)) { gs.board[r] = Array(8).fill(0); cl++; }
-  for (let c = 0; c < 8; c++) if (gs.board.every(row => row[c] > 0)) { gs.board.forEach(row => row[c] = 0); cl++; }
-  if (cl > 0) { gs.comboCount++; gs.score += cl * 10 * (1 + gs.comboCount * 0.5); gs.coins += cl * 5; rToast(`消除 ${cl} 行！Combo x${gs.comboCount}`); } else { gs.comboCount = 0; }
+function rClearPreview() { document.querySelectorAll('.g-cell.preview,.g-cell.preview-invalid,.g-cell.bomb-target').forEach(el=>el.classList.remove('preview','preview-invalid','bomb-target')); }
+
+function rCellClick(r,c) {
+  if(gs.gameStatus!=='playing') return;
+  if(gs.bombMode) {
+    for(let dr=-1;dr<=1;dr++) for(let dc=-1;dc<=1;dc++){
+      const nr=r+dr,nc=c+dc;
+      if(nr>=0&&nr<SZ&&nc>=0&&nc<SZ) gs.board[nr][nc]=0;
+    }
+    gs.bombMode=false;
+    rCheckClear();
+    rToast('💣 炸弹使用成功！');
+    if(checkGameOver()){gs.gameStatus='gameOver';if(gs.score>gs.bestScore)gs.bestScore=gs.score;}
+    rRender(); return;
+  }
+  if(gs.selectedShape<0){if(gs.board[r][c]>0)rToast(`(${r+1},${c+1}) 已有方块`);return;}
+  const sh=gs.pendingShapes[gs.selectedShape];
+  if(sh.used) return;
+  const m=sh.matrix, br=r-Math.floor(m.length/2), bc=c-Math.floor(m[0].length/2);
+  if(!canPlace(sh,br,bc)){rToast('无法放置在此位置');return;}
+  placeShape(sh,br,bc);
+  sh.used=true;
+  gs.selectedShape=-1;
+  rCheckClear();
+  if(gs.pendingShapes.every(s=>s.used)) gs.pendingShapes=gen3();
+  if(checkGameOver()){gs.gameStatus='gameOver';if(gs.score>gs.bestScore)gs.bestScore=gs.score;}
+  rRender();
 }
-function rUseBomb() { if (gs.boosters.bomb <= 0) { rToast('炸弹已用完'); return; } if (gs.coins < 120) { rToast('金币不足'); return; } gs.boosters.bomb--; gs.coins -= 120; for (let r=3;r<6;r++) for (let c=3;c<6;c++) gs.board[r][c]=0; rToast('💣 炸弹使用成功！'); rRender(); }
-function rUseGravity() { if (gs.boosters.gravity <= 0) { rToast('重力已用完'); return; } if (gs.coins < 200) { rToast('金币不足'); return; } gs.boosters.gravity--; gs.coins -= 200; for (let c=0;c<8;c++) { let s=[]; for (let r=0;r<8;r++) if (gs.board[r][c]>0) s.push(gs.board[r][c]); for (let r=0;r<8;r++) gs.board[r][c] = r<8-s.length ? 0 : s[r-(8-s.length)]; } rCheckClear(); rToast('⬇️ 重力执行！'); rRender(); }
-function rUseRefresh() { if (gs.boosters.refresh <= 0) { rToast('刷新已用完'); return; } if (gs.coins < 150) { rToast('金币不足'); return; } gs.boosters.refresh--; gs.coins -= 150; gs.pendingShapes = [{ matrix:[[1,1,1,1,1]],color:Math.ceil(Math.random()*7),used:false },{ matrix:[[1,0],[1,1]],color:Math.ceil(Math.random()*7),used:false },{ matrix:[[1,1],[1,1]],color:Math.ceil(Math.random()*7),used:false }]; rToast('🔄 已刷新！'); rRender(); }
-function rRevive() { gs.gameStatus = 'playing'; gs.board[6]=Array(8).fill(0); gs.board[7]=Array(8).fill(0); gs.pendingShapes=[{matrix:[[1,1]],color:Math.ceil(Math.random()*7),used:false},{matrix:[[1],[1]],color:Math.ceil(Math.random()*7),used:false},{matrix:[[1]],color:Math.ceil(Math.random()*7),used:false}]; rToast('复活成功！'); rRender(); }
-function rRestart() { gs.gameStatus='playing'; gs.errState='normal'; gs.score=0; gs.coins=100; gs.comboCount=0; gs.boosters={bomb:3,gravity:3,refresh:3}; gs.pendingShapes=[{matrix:[[1,1,1],[0,0,1]],color:3,used:false},{matrix:[[1,1],[1,0]],color:5,used:false},{matrix:[[1],[1],[1],[1]],color:7,used:false}]; initGBoard(); rRender(); rToast('新游戏开始！'); }
+
+function rStartGame(){gs.errState='normal';gs.gameStatus='playing';gs.score=0;gs.coins=100;gs.comboCount=0;gs.selectedShape=-1;gs.bombMode=false;gs.boosters={bomb:3,gravity:3,refresh:3};gs.board=Array.from({length:SZ},()=>Array(SZ).fill(0));gs.pendingShapes=gen3();rRender();rToast('游戏开始！');}
+
+function rUseBomb(){if(gs.boosters.bomb<=0){rToast('炸弹已用完');return;}if(gs.coins<120){rToast('金币不足（需120）');return;}gs.boosters.bomb--;gs.coins-=120;gs.selectedShape=-1;gs.bombMode=true;rRender();rToast('点击棋盘选择炸弹目标');}
+
+function rUseGravity(){if(gs.boosters.gravity<=0){rToast('重力已用完');return;}if(gs.coins<200){rToast('金币不足（需200）');return;}gs.boosters.gravity--;gs.coins-=200;gs.selectedShape=-1;gs.bombMode=false;for(let c=0;c<SZ;c++){let s=[];for(let r=0;r<SZ;r++)if(gs.board[r][c]>0)s.push(gs.board[r][c]);for(let r=0;r<SZ;r++)gs.board[r][c]=r<SZ-s.length?0:s[r-(SZ-s.length)];}rCheckClear();rToast('⬇️ 重力执行成功！');if(checkGameOver()){gs.gameStatus='gameOver';if(gs.score>gs.bestScore)gs.bestScore=gs.score;}rRender();}
+
+function rUseRefresh(){if(gs.boosters.refresh<=0){rToast('刷新已用完');return;}if(gs.coins<150){rToast('金币不足（需150）');return;}gs.boosters.refresh--;gs.coins-=150;gs.selectedShape=-1;gs.bombMode=false;gs.pendingShapes=gen3();rToast('🔄 方块已刷新！');if(checkGameOver()){gs.gameStatus='gameOver';if(gs.score>gs.bestScore)gs.bestScore=gs.score;}rRender();}
+
+function rRevive(){gs.gameStatus='playing';gs.selectedShape=-1;gs.bombMode=false;for(let r=SZ-2;r<SZ;r++)gs.board[r]=Array(SZ).fill(0);gs.pendingShapes=gen3();rToast('复活成功！');rRender();}
+
+function rRestart(){gs.gameStatus='playing';gs.errState='normal';gs.score=0;gs.coins=100;gs.comboCount=0;gs.selectedShape=-1;gs.bombMode=false;gs.boosters={bomb:3,gravity:3,refresh:3};gs.board=Array.from({length:SZ},()=>Array(SZ).fill(0));gs.pendingShapes=gen3();rRender();rToast('新游戏开始！');}
 
 // TOC 平滑滚动
 document.querySelectorAll('.toc a').forEach(a => {

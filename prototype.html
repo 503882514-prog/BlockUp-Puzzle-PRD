@@ -37,8 +37,12 @@ body { background: #f6f4ef; font-family: -apple-system, BlinkMacSystemFont, "Seg
 .coins-box span { color: #ffd700; font-size: 14px; font-weight: 600; }
 
 .board-container { padding: 8px 16px; display: flex; justify-content: center; }
-.board { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; width: 320px; height: 320px; background: rgba(255,255,255,0.05); border-radius: 12px; padding: 4px; }
-.cell { border-radius: 4px; background: rgba(255,255,255,0.08); transition: all 0.15s; }
+.board { display: grid; grid-template-columns: repeat(10, 1fr); gap: 2px; width: 320px; height: 320px; background: rgba(255,255,255,0.05); border-radius: 12px; padding: 4px; }
+.cell { border-radius: 3px; background: rgba(255,255,255,0.08); transition: all 0.15s; cursor: pointer; }
+.cell.preview { background: rgba(255,255,255,0.25); }
+.cell.preview-invalid { background: rgba(239,68,68,0.3); }
+.cell.bomb-target { background: rgba(255,200,0,0.4); }
+.pending-shape.selected { background: rgba(79,70,229,0.3); box-shadow: 0 0 0 2px #4f46e5; }
 .cell.filled-1 { background: #ef4444; }
 .cell.filled-2 { background: #f59e0b; }
 .cell.filled-3 { background: #10b981; }
@@ -181,338 +185,112 @@ body { background: #f6f4ef; font-family: -apple-system, BlinkMacSystemFont, "Seg
 </div>
 
 <script>
-// 全局状态
-window.state = {
-  gameStatus: 'playing',
-  errState: 'normal',
-  score: 1280,
-  bestScore: 3560,
-  coins: 450,
-  comboCount: 0,
-  boosterHighlight: 'bomb',
-  userType: 'casual',
-  musicEnabled: true,
-  sfxEnabled: true,
-  showSettings: false,
-  board: [],
-  pendingShapes: [
-    { matrix: [[1,1,1],[0,0,1],[0,0,0]], color: 3, used: false },
-    { matrix: [[1,1],[1,0]], color: 5, used: false },
-    { matrix: [[1],[1],[1],[1]], color: 7, used: false }
-  ],
-  boosters: { bomb: 3, gravity: 3, refresh: 3 },
-  reviveTimer: 10
-};
+const SZ=10;
+const SHAPES=[[[1]],[[1],[1,1]],[[0,1],[1,1]],[[1,1],[0,1]],[[1,1],[1]],[[1,1,1],[1]],[[1,1],[0,1],[0,1]],[[0,0,1],[1,1,1]],[[1],[1],[1,1]],[[1,1,1],[0,0,1]],[[0,1],[0,1],[1,1]],[[1],[1,1,1]],[[1,1],[1],[1]],[[1,1,1],[1],[1]],[[1,1,1],[0,0,1],[0,0,1]],[[0,0,1],[0,0,1],[1,1,1]],[[1],[1],[1,1,1]],[[1,1]],[[1],[1]],[[1,1,1]],[[1],[1],[1]],[[1,1,1,1]],[[1],[1],[1],[1]],[[1,1,1,1,1]],[[1],[1],[1],[1],[1]],[[1,1],[1,1]],[[1,1],[1,1],[1,1]],[[1,1,1],[1,1,1]],[[1,1,1],[1,1,1],[1,1,1]],[[1,1,1],[0,1]],[[0,1],[1,1],[0,1]],[[0,1],[1,1,1]],[[1],[1,1],[1]],[[1,1],[0,1,1]],[[0,1],[1,1],[1]],[[0,1,1],[1,1]],[[1],[1,1],[0,1]]];
+const COLORS=['#ef4444','#f59e0b','#10b981','#3b82f6','#8b5cf6','#ec4899','#06b6d4'];
+function trimShape(m){const cols=Math.max(...m.map(r=>r.length));return m.map(r=>{const a=[...r];while(a.length<cols)a.push(0);return a;});}
+function randShape(){const i=Math.floor(Math.random()*SHAPES.length),c=Math.floor(Math.random()*7)+1;return{matrix:trimShape(SHAPES[i]),color:c,used:false};}
+function gen3(){return[randShape(),randShape(),randShape()];}
 
-// 初始化棋盘
-function initBoard() {
-  let board = Array(8).fill(null).map(() => Array(8).fill(0));
-  // 预设一些方块制造游戏中状态
-  const preset = [
-    [0,0,0,1,2,0,3,4],[0,0,1,1,0,0,0,4],[0,0,0,0,5,5,0,0],
-    [6,6,0,0,5,0,0,7],[6,0,0,0,0,0,0,7],[0,0,2,2,2,0,0,7],
-    [3,3,3,0,0,4,4,0],[1,1,1,1,1,1,1,0]
-  ];
-  // 休闲玩家看到较多空位
-  if (state.userType === 'casual') {
-    board = preset.map(row => row.map(v => v));
-    board[7] = [1,1,1,1,1,1,1,0]; // 接近完成的行
-  } else {
-    // 高分玩家棋盘更满
-    board = [
-      [1,2,3,1,2,0,3,4],[5,6,1,1,7,2,3,4],[4,3,2,5,5,5,6,7],
-      [6,6,1,2,5,3,4,7],[6,7,3,4,2,1,5,7],[1,2,2,2,2,6,3,7],
-      [3,3,3,5,6,4,4,1],[1,1,1,1,1,1,1,0]
-    ];
-  }
-  state.board = board;
-}
+window.state={gameStatus:'playing',errState:'normal',score:0,bestScore:0,coins:100,comboCount:0,boosterHighlight:'bomb',userType:'casual',musicEnabled:true,sfxEnabled:true,showSettings:false,board:[],selectedShape:-1,bombMode:false,pendingShapes:gen3(),boosters:{bomb:3,gravity:3,refresh:3}};
 
-// 控制台交互
-function selectBooster(type) {
-  document.querySelectorAll('#boosterChips .chip').forEach(c => c.classList.remove('active'));
-  document.querySelector(`[data-booster="${type}"]`).classList.add('active');
-  state.boosterHighlight = type;
-}
-function selectUser(type) {
-  document.querySelectorAll('#userChips .chip').forEach(c => c.classList.remove('active'));
-  document.querySelector(`[data-user="${type}"]`).classList.add('active');
-  state.userType = type;
-  if (type === 'hardcore') { state.score = 4820; state.coins = 120; state.comboCount = 3; }
-  else { state.score = 1280; state.coins = 450; state.comboCount = 0; }
-}
-function selectStatus(status) {
-  document.querySelectorAll('#statusChips .chip').forEach(c => c.classList.remove('active'));
-  document.querySelector(`[data-status="${status}"]`).classList.add('active');
-  state.gameStatus = status;
-}
-function selectCombo(n) {
-  document.querySelectorAll('#comboChips .chip').forEach(c => c.classList.remove('active'));
-  document.querySelector(`[data-combo="${n}"]`).classList.add('active');
-  state.comboCount = n;
-}
-function selectState(s) {
-  document.querySelectorAll('#stateChips .chip').forEach(c => c.classList.remove('active'));
-  document.querySelector(`[data-state="${s}"]`).classList.add('active');
-  state.errState = s;
-}
-function applyToPrototype() { initBoard(); render(); }
+function initBoard(){state.board=Array.from({length:SZ},()=>Array(SZ).fill(0));if(state.userType==='casual'){state.board=[[0,0,0,0,1,2,0,3,0,4],[0,0,1,0,1,0,0,0,4,0],[0,0,0,0,0,5,5,0,0,0],[0,6,6,0,0,5,0,0,7,0],[0,6,0,0,0,0,0,0,7,0],[0,0,0,2,2,2,0,0,7,0],[0,3,3,3,0,0,4,4,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0]];}else{state.board=[[1,2,3,1,2,0,3,4,5,6],[5,6,1,1,7,2,3,4,0,2],[4,3,2,5,5,5,6,7,1,0],[6,6,1,2,5,3,4,7,2,3],[6,7,3,4,2,1,5,7,0,4],[1,2,2,2,2,6,3,7,5,0],[3,3,3,5,6,4,4,1,0,2],[1,2,0,4,5,6,7,1,3,0],[0,5,3,2,1,0,6,4,7,1],[2,0,1,3,0,5,0,2,4,6]];state.score=4820;state.coins=120;state.comboCount=3;}}
+function canPlace(sh,br,bc){const m=sh.matrix;for(let r=0;r<m.length;r++)for(let c=0;c<m[0].length;c++){if(!m[r][c])continue;const nr=br+r,nc=bc+c;if(nr<0||nr>=SZ||nc<0||nc>=SZ||state.board[nr][nc]>0)return false;}return true;}
+function canPlaceAnywhere(sh){for(let r=0;r<SZ;r++)for(let c=0;c<SZ;c++)if(canPlace(sh,r,c))return true;return false;}
+function checkGameOver(){for(const sh of state.pendingShapes)if(!sh.used&&canPlaceAnywhere(sh))return false;return true;}
+function placeShape(sh,br,bc){const m=sh.matrix;for(let r=0;r<m.length;r++)for(let c=0;c<m[0].length;c++)if(m[r][c])state.board[br+r][bc+c]=sh.color;state.score+=m.flat().filter(v=>v).length;}
+function checkLineClear(){let lines=0;for(let r=0;r<SZ;r++)if(state.board[r].every(v=>v>0)){state.board[r]=Array(SZ).fill(0);lines++;}for(let c=0;c<SZ;c++)if(state.board.every(row=>row[c]>0)){state.board.forEach(row=>row[c]=0);lines++;}if(lines>0){state.comboCount++;state.score+=Math.floor(lines*10*(1+state.comboCount*0.5));state.coins+=lines*5;showToast(`消除 ${lines} 行！Combo x${state.comboCount}`);}else{state.comboCount=0;}return lines;}
 
-// Toast
-function showToast(text) {
-  const t = document.getElementById('gameToast');
-  if (t) { t.textContent = text; t.classList.add('visible'); setTimeout(() => t.classList.remove('visible'), 2000); }
-}
+function selectBooster(type){document.querySelectorAll('#boosterChips .chip').forEach(c=>c.classList.remove('active'));document.querySelector(`[data-booster="${type}"]`).classList.add('active');state.boosterHighlight=type;}
+function selectUser(type){document.querySelectorAll('#userChips .chip').forEach(c=>c.classList.remove('active'));document.querySelector(`[data-user="${type}"]`).classList.add('active');state.userType=type;if(type==='hardcore'){state.score=4820;state.coins=120;state.comboCount=3;}else{state.score=0;state.coins=100;state.comboCount=0;}}
+function selectStatus(s){document.querySelectorAll('#statusChips .chip').forEach(c=>c.classList.remove('active'));document.querySelector(`[data-status="${s}"]`).classList.add('active');state.gameStatus=s;}
+function selectCombo(n){document.querySelectorAll('#comboChips .chip').forEach(c=>c.classList.remove('active'));document.querySelector(`[data-combo="${n}"]`).classList.add('active');state.comboCount=n;}
+function selectState(s){document.querySelectorAll('#stateChips .chip').forEach(c=>c.classList.remove('active'));document.querySelector(`[data-state="${s}"]`).classList.add('active');state.errState=s;}
+function applyToPrototype(){state.selectedShape=-1;state.bombMode=false;initBoard();state.pendingShapes=gen3();render();}
 
-// 渲染手机屏幕
-function render() {
-  const screen = document.getElementById('phoneScreen');
+function showToast(text){const t=document.getElementById('gameToast');if(t){t.textContent=text;t.classList.add('visible');setTimeout(()=>t.classList.remove('visible'),2000);}}
 
-  if (state.errState === 'empty') {
-    screen.innerHTML = `
-      <div class="game-header"><div class="score-box"><div class="label">分数</div><div class="value">0</div></div><div class="coins-box">🪙 <span>0</span></div><div class="score-box"><div class="label">最高分</div><div class="value">0</div></div></div>
-      <div class="empty-state"><div class="icon">🧩</div><div class="text">点击下方开始游戏</div><button onclick="startGame()" style="margin-top:16px;padding:12px 32px;background:#4f46e5;color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:600;cursor:pointer;">开始游戏</button></div>
-      <div class="toast" id="gameToast"></div>`;
-    return;
-  }
+function render(){
+  const screen=document.getElementById('phoneScreen');
+  if(state.errState==='empty'){screen.innerHTML=`<div class="game-header"><div class="score-box"><div class="label">分数</div><div class="value">0</div></div><div class="coins-box">🪙 <span>0</span></div><div class="score-box"><div class="label">最高分</div><div class="value">0</div></div></div><div class="empty-state"><div class="icon">🧩</div><div class="text">点击下方开始游戏</div><button onclick="startGame()" style="margin-top:16px;padding:12px 32px;background:#4f46e5;color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:600;cursor:pointer;">开始游戏</button></div><div class="toast" id="gameToast"></div>`;return;}
+  if(state.errState==='loading'){screen.innerHTML=`<div class="game-header"><div class="score-box"><div class="label">分数</div><div class="value">---</div></div><div class="coins-box">🪙 <span>---</span></div><div class="score-box"><div class="label">最高分</div><div class="value">---</div></div></div><div style="position:relative;height:340px;" class="loading-state"><div class="board-container"><div class="board">${Array(100).fill('<div class="cell" style="opacity:0.3;"></div>').join('')}</div></div><div class="loading-spinner"></div></div><div style="text-align:center;color:rgba(255,255,255,0.5);font-size:13px;margin-top:12px;">加载游戏资源中...</div><div class="toast" id="gameToast"></div>`;return;}
+  if(state.errState==='error'){screen.innerHTML=`<div class="game-header"><div class="score-box"><div class="label">分数</div><div class="value">${state.score}</div></div><div class="coins-box">🪙 <span>${state.coins}</span></div><div class="score-box"><div class="label">最高分</div><div class="value">${state.bestScore}</div></div></div><div class="error-state"><div class="icon">⚠️</div><div class="title">游戏数据加载失败</div><div class="desc">本地存储数据损坏</div><button class="btn-retry" onclick="handleRetry()">重新开始</button></div><div class="toast" id="gameToast"></div>`;return;}
 
-  if (state.errState === 'loading') {
-    screen.innerHTML = `
-      <div class="game-header"><div class="score-box"><div class="label">分数</div><div class="value">---</div></div><div class="coins-box">🪙 <span>---</span></div><div class="score-box"><div class="label">最高分</div><div class="value">---</div></div></div>
-      <div style="position:relative;height:340px;" class="loading-state"><div class="board-container"><div class="board">${Array(64).fill('<div class="cell" style="opacity:0.3;"></div>').join('')}</div></div><div class="loading-spinner"></div></div>
-      <div style="text-align:center;color:rgba(255,255,255,0.5);font-size:13px;margin-top:12px;">加载游戏资源中...</div>
-      <div class="toast" id="gameToast"></div>`;
-    return;
-  }
+  let boardHTML='';
+  for(let r=0;r<SZ;r++)for(let c=0;c<SZ;c++){const v=state.board[r][c];const cls=v>0?`cell filled-${v}`:'cell';boardHTML+=`<div class="${cls}" onmouseenter="hoverCell(${r},${c})" onclick="handleCellClick(${r},${c})"></div>`;}
 
-  if (state.errState === 'error') {
-    screen.innerHTML = `
-      <div class="game-header"><div class="score-box"><div class="label">分数</div><div class="value">${state.score}</div></div><div class="coins-box">🪙 <span>${state.coins}</span></div><div class="score-box"><div class="label">最高分</div><div class="value">${state.bestScore}</div></div></div>
-      <div class="error-state"><div class="icon">⚠️</div><div class="title">游戏数据加载失败</div><div class="desc">本地存储数据损坏，请重新开始游戏</div><button class="btn-retry" onclick="handleRetry()">重新开始</button></div>
-      <div class="toast" id="gameToast"></div>`;
-    return;
-  }
+  const colors=['','#ef4444','#f59e0b','#10b981','#3b82f6','#8b5cf6','#ec4899','#06b6d4'];
+  let shapesHTML=state.pendingShapes.map((sh,i)=>{const cols=sh.matrix[0].length;let cells='';sh.matrix.forEach(row=>{for(let c=0;c<cols;c++)cells+=`<div class="shape-cell ${(row[c]||0)?'filled':''}" style="color:${colors[sh.color]}"></div>`;});const sel=(!sh.used&&state.selectedShape===i)?'selected':'';return`<div class="pending-shape ${sh.used?'used':''} ${sel}" onclick="handleShapeClick(${i})"><div class="shape-grid" style="grid-template-columns:repeat(${cols},1fr);">${cells}</div></div>`;}).join('');
 
-  // 正常态
-  let boardHTML = '';
-  for (let r = 0; r < 8; r++) {
-    for (let c = 0; c < 8; c++) {
-      const v = state.board[r][c];
-      const cls = v > 0 ? `cell filled-${v}` : 'cell';
-      boardHTML += `<div class="${cls}" data-r="${r}" data-c="${c}" onclick="handleCellClick(${r},${c})"></div>`;
-    }
-  }
+  const helpText=state.selectedShape>=0?'<div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.4);padding:4px;">点击棋盘放置选中方块</div>':state.bombMode?'<div style="text-align:center;font-size:11px;color:rgba(255,200,0,0.6);padding:4px;">点击棋盘选择炸弹目标</div>':'';
 
-  let shapesHTML = state.pendingShapes.map((shape, idx) => {
-    const cols = shape.matrix[0].length;
-    const rows = shape.matrix.length;
-    let cells = '';
-    const colors = ['','#ef4444','#f59e0b','#10b981','#3b82f6','#8b5cf6','#ec4899','#06b6d4'];
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        cells += `<div class="shape-cell ${shape.matrix[r][c] ? 'filled' : ''}" style="color:${colors[shape.color]}"></div>`;
-      }
-    }
-    return `<div class="pending-shape ${shape.used ? 'used' : ''}" onclick="handleShapeClick(${idx})" style="color:${colors[shape.color]}"><div class="shape-grid" style="grid-template-columns:repeat(${cols},1fr);">${cells}</div></div>`;
-  }).join('');
-
-  const comboVisible = state.comboCount > 0 ? 'visible' : '';
-  const comboWidth = Math.min(state.comboCount * 33, 100);
-
-  screen.innerHTML = `
-    <div class="game-header">
-      <div class="score-box"><div class="label">分数</div><div class="value">${state.score}</div></div>
-      <div class="coins-box">🪙 <span>${state.coins}</span></div>
-      <div class="score-box"><div class="label">最高分</div><div class="value">${state.bestScore}</div></div>
-    </div>
+  screen.innerHTML=`
+    <div class="game-header"><div class="score-box"><div class="label">分数</div><div class="value">${state.score}</div></div><div class="coins-box">🪙 <span>${state.coins}</span></div><div class="score-box"><div class="label">最高分</div><div class="value">${state.bestScore}</div></div></div>
     <button class="settings-btn" onclick="openSettings()">⚙️</button>
-    <div class="combo-panel ${comboVisible}">
-      <div class="combo-text">🔥 Combo x${state.comboCount}</div>
-      <div class="combo-bar"><div class="combo-bar-fill" style="width:${comboWidth}%"></div></div>
-    </div>
-    <div class="board-container"><div class="board">${boardHTML}</div></div>
+    <div class="combo-panel ${state.comboCount>0?'visible':''}"><div class="combo-text">🔥 Combo x${state.comboCount}</div><div class="combo-bar"><div class="combo-bar-fill" style="width:${Math.min(state.comboCount*33,100)}%"></div></div></div>
+    <div class="board-container"><div class="board" onmouseleave="clearPreview()">${boardHTML}</div></div>
+    ${helpText}
     <div class="pending-shapes">${shapesHTML}</div>
     <div class="booster-bar">
-      <button class="booster-btn ${state.boosters.bomb <= 0 ? 'disabled' : ''}" onclick="useBomb()">
-        <span class="icon">💣</span><span class="name">炸弹</span><span class="count">×${state.boosters.bomb}</span>
-      </button>
-      <button class="booster-btn ${state.boosters.gravity <= 0 ? 'disabled' : ''}" onclick="useGravity()">
-        <span class="icon">⬇️</span><span class="name">重力</span><span class="count">×${state.boosters.gravity}</span>
-      </button>
-      <button class="booster-btn ${state.boosters.refresh <= 0 ? 'disabled' : ''}" onclick="useRefresh()">
-        <span class="icon">🔄</span><span class="name">刷新</span><span class="count">×${state.boosters.refresh}</span>
-      </button>
+      <button class="booster-btn" onclick="useBomb()"><span class="icon">💣</span><span class="name">炸弹 ¢120</span><span class="count">×${state.boosters.bomb}</span></button>
+      <button class="booster-btn" onclick="useGravity()"><span class="icon">⬇️</span><span class="name">重力 ¢200</span><span class="count">×${state.boosters.gravity}</span></button>
+      <button class="booster-btn" onclick="useRefresh()"><span class="icon">🔄</span><span class="name">刷新 ¢150</span><span class="count">×${state.boosters.refresh}</span></button>
     </div>
-    <div class="overlay ${state.gameStatus === 'gameOver' || state.gameStatus === 'reviving' ? 'visible' : ''}" id="gameOverlay">
-      <h3>游戏结束</h3>
-      <div class="go-score">${state.score}</div>
-      <div class="go-best">最高分：${state.bestScore}</div>
-      ${state.gameStatus === 'reviving' ? `<button class="btn-revive" onclick="handleRevive()">复活继续</button><div class="revive-timer">⏱ ${state.reviveTimer}s 内选择</div>` : ''}
+    <div class="overlay ${state.gameStatus==='gameOver'||state.gameStatus==='reviving'?'visible':''}" id="gameOverlay">
+      <h3>游戏结束</h3><div class="go-score">${state.score}</div><div class="go-best">最高分：${state.bestScore}</div>
+      ${state.gameStatus==='reviving'?'<button class="btn-revive" onclick="handleRevive()">复活继续</button>':''}
       <button class="btn-restart" onclick="handleRestart()">重新开始</button>
     </div>
-    <div class="settings-overlay ${state.showSettings ? 'visible' : ''}" id="settingsOverlay">
+    <div class="settings-overlay ${state.showSettings?'visible':''}" id="settingsOverlay">
       <h3>设置</h3>
-      <div class="setting-row"><span>🎵 背景音乐</span><div class="toggle ${state.musicEnabled ? 'on' : ''}" onclick="toggleMusic()"></div></div>
-      <div class="setting-row"><span>🔊 游戏音效</span><div class="toggle ${state.sfxEnabled ? 'on' : ''}" onclick="toggleSfx()"></div></div>
+      <div class="setting-row"><span>🎵 背景音乐</span><div class="toggle ${state.musicEnabled?'on':''}" onclick="toggleMusic()"></div></div>
+      <div class="setting-row"><span>🔊 游戏音效</span><div class="toggle ${state.sfxEnabled?'on':''}" onclick="toggleSfx()"></div></div>
       <button class="btn-close-settings" onclick="closeSettings()">关闭</button>
     </div>
     <div class="toast" id="gameToast"></div>`;
 }
 
-// 游戏交互
-function startGame() {
-  state.errState = 'normal';
-  state.gameStatus = 'playing';
-  state.score = 0;
-  state.coins = 100;
-  state.comboCount = 0;
-  initBoard();
-  render();
-  showToast('游戏开始！');
-}
+function handleShapeClick(i){if(state.pendingShapes[i].used||state.gameStatus!=='playing')return;state.bombMode=false;state.selectedShape=state.selectedShape===i?-1:i;render();}
 
-function handleShapeClick(idx) {
-  if (state.pendingShapes[idx].used) return;
-  state.pendingShapes[idx].used = true;
-  state.score += 10;
-  // 模拟放置
-  const row = Math.floor(Math.random() * 5);
-  const col = Math.floor(Math.random() * 5);
-  const shape = state.pendingShapes[idx];
-  for (let r = 0; r < shape.matrix.length; r++) {
-    for (let c = 0; c < shape.matrix[0].length; c++) {
-      if (shape.matrix[r][c] && row+r < 8 && col+c < 8) {
-        state.board[row+r][col+c] = shape.color;
-      }
-    }
-  }
-  // 检查是否全部放完
-  if (state.pendingShapes.every(s => s.used)) {
-    state.pendingShapes = [
-      { matrix: [[1,1],[1,1]], color: Math.ceil(Math.random()*7), used: false },
-      { matrix: [[1,1,1]], color: Math.ceil(Math.random()*7), used: false },
-      { matrix: [[1],[1],[1]], color: Math.ceil(Math.random()*7), used: false }
-    ];
-  }
-  // 检查行消除
+function hoverCell(r,c){
+  if(state.gameStatus!=='playing')return;
+  document.querySelectorAll('.cell.preview,.cell.preview-invalid,.cell.bomb-target').forEach(el=>el.classList.remove('preview','preview-invalid','bomb-target'));
+  if(state.bombMode){const cells=document.querySelectorAll('.board .cell');for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){const nr=r+dr,nc=c+dc;if(nr>=0&&nr<SZ&&nc>=0&&nc<SZ)cells[nr*SZ+nc].classList.add('bomb-target');}return;}
+  if(state.selectedShape<0)return;
+  const sh=state.pendingShapes[state.selectedShape];if(sh.used)return;
+  const m=sh.matrix,br=r-Math.floor(m.length/2),bc=c-Math.floor(m[0].length/2);
+  const valid=canPlace(sh,br,bc);const cells=document.querySelectorAll('.board .cell');
+  for(let dr=0;dr<m.length;dr++)for(let dc=0;dc<m[0].length;dc++){if(!m[dr][dc])continue;const nr=br+dr,nc=bc+dc;if(nr>=0&&nr<SZ&&nc>=0&&nc<SZ)cells[nr*SZ+nc].classList.add(valid?'preview':'preview-invalid');}
+}
+function clearPreview(){document.querySelectorAll('.cell.preview,.cell.preview-invalid,.cell.bomb-target').forEach(el=>el.classList.remove('preview','preview-invalid','bomb-target'));}
+
+function handleCellClick(r,c){
+  if(state.gameStatus!=='playing')return;
+  if(state.bombMode){for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){const nr=r+dr,nc=c+dc;if(nr>=0&&nr<SZ&&nc>=0&&nc<SZ)state.board[nr][nc]=0;}state.bombMode=false;checkLineClear();showToast('💣 炸弹使用成功！');if(checkGameOver()){state.gameStatus='gameOver';if(state.score>state.bestScore)state.bestScore=state.score;}render();return;}
+  if(state.selectedShape<0){if(state.board[r][c]>0)showToast('先选择下方方块');return;}
+  const sh=state.pendingShapes[state.selectedShape];if(sh.used)return;
+  const m=sh.matrix,br=r-Math.floor(m.length/2),bc=c-Math.floor(m[0].length/2);
+  if(!canPlace(sh,br,bc)){showToast('无法放置在此位置');return;}
+  placeShape(sh,br,bc);sh.used=true;state.selectedShape=-1;
   checkLineClear();
+  if(state.pendingShapes.every(s=>s.used))state.pendingShapes=gen3();
+  if(checkGameOver()){state.gameStatus='gameOver';if(state.score>state.bestScore)state.bestScore=state.score;}
   render();
 }
 
-function checkLineClear() {
-  let cleared = 0;
-  for (let r = 0; r < 8; r++) {
-    if (state.board[r].every(v => v > 0)) {
-      state.board[r] = Array(8).fill(0);
-      cleared++;
-    }
-  }
-  for (let c = 0; c < 8; c++) {
-    if (state.board.every(row => row[c] > 0)) {
-      state.board.forEach(row => row[c] = 0);
-      cleared++;
-    }
-  }
-  if (cleared > 0) {
-    state.comboCount++;
-    state.score += cleared * 10 * (1 + state.comboCount * 0.5);
-    state.coins += cleared * 5;
-    showToast(`消除 ${cleared} 行！Combo x${state.comboCount}`);
-  } else {
-    state.comboCount = 0;
-  }
-}
+function startGame(){state.errState='normal';state.gameStatus='playing';state.score=0;state.coins=100;state.comboCount=0;state.selectedShape=-1;state.bombMode=false;state.boosters={bomb:3,gravity:3,refresh:3};state.board=Array.from({length:SZ},()=>Array(SZ).fill(0));state.pendingShapes=gen3();render();showToast('游戏开始！');}
+function useBomb(){if(state.boosters.bomb<=0){showToast('炸弹已用完');return;}if(state.coins<120){showToast('金币不足（需120）');return;}state.boosters.bomb--;state.coins-=120;state.selectedShape=-1;state.bombMode=true;render();showToast('点击棋盘选择炸弹目标');}
+function useGravity(){if(state.boosters.gravity<=0){showToast('重力已用完');return;}if(state.coins<200){showToast('金币不足（需200）');return;}state.boosters.gravity--;state.coins-=200;state.selectedShape=-1;state.bombMode=false;for(let c=0;c<SZ;c++){let s=[];for(let r=0;r<SZ;r++)if(state.board[r][c]>0)s.push(state.board[r][c]);for(let r=0;r<SZ;r++)state.board[r][c]=r<SZ-s.length?0:s[r-(SZ-s.length)];}checkLineClear();showToast('⬇️ 重力执行成功！');if(checkGameOver()){state.gameStatus='gameOver';if(state.score>state.bestScore)state.bestScore=state.score;}render();}
+function useRefresh(){if(state.boosters.refresh<=0){showToast('刷新已用完');return;}if(state.coins<150){showToast('金币不足（需150）');return;}state.boosters.refresh--;state.coins-=150;state.selectedShape=-1;state.bombMode=false;state.pendingShapes=gen3();showToast('🔄 方块已刷新！');if(checkGameOver()){state.gameStatus='gameOver';if(state.score>state.bestScore)state.bestScore=state.score;}render();}
+function handleRevive(){state.gameStatus='playing';state.selectedShape=-1;state.bombMode=false;for(let r=SZ-2;r<SZ;r++)state.board[r]=Array(SZ).fill(0);state.pendingShapes=gen3();showToast('复活成功！');render();}
+function handleRestart(){state.gameStatus='playing';state.errState='normal';state.score=0;state.coins=100;state.comboCount=0;state.selectedShape=-1;state.bombMode=false;state.boosters={bomb:3,gravity:3,refresh:3};state.board=Array.from({length:SZ},()=>Array(SZ).fill(0));state.pendingShapes=gen3();render();showToast('新游戏开始！');}
+function handleRetry(){state.errState='normal';handleRestart();}
+function openSettings(){state.showSettings=true;render();}
+function closeSettings(){state.showSettings=false;render();}
+function toggleMusic(){state.musicEnabled=!state.musicEnabled;render();}
+function toggleSfx(){state.sfxEnabled=!state.sfxEnabled;render();}
 
-function handleCellClick(r, c) {
-  if (state.board[r][c] > 0) {
-    showToast(`位置 (${r+1},${c+1}) 已有方块`);
-  }
-}
-
-function useBomb() {
-  if (state.boosters.bomb <= 0) { showToast('炸弹已用完'); return; }
-  if (state.coins < 120) { showToast('金币不足（需120）'); return; }
-  state.boosters.bomb--;
-  state.coins -= 120;
-  // 模拟清除中心区域
-  for (let r = 3; r < 6; r++) for (let c = 3; c < 6; c++) state.board[r][c] = 0;
-  showToast('💣 炸弹使用成功！');
-  render();
-}
-
-function useGravity() {
-  if (state.boosters.gravity <= 0) { showToast('重力道具已用完'); return; }
-  if (state.coins < 200) { showToast('金币不足（需200）'); return; }
-  state.boosters.gravity--;
-  state.coins -= 200;
-  // 模拟重力下落
-  for (let c = 0; c < 8; c++) {
-    let stack = [];
-    for (let r = 0; r < 8; r++) { if (state.board[r][c] > 0) stack.push(state.board[r][c]); }
-    for (let r = 0; r < 8; r++) { state.board[r][c] = r < 8 - stack.length ? 0 : stack[r - (8 - stack.length)]; }
-  }
-  checkLineClear();
-  showToast('⬇️ 重力执行成功！');
-  render();
-}
-
-function useRefresh() {
-  if (state.boosters.refresh <= 0) { showToast('刷新道具已用完'); return; }
-  if (state.coins < 150) { showToast('金币不足（需150）'); return; }
-  state.boosters.refresh--;
-  state.coins -= 150;
-  state.pendingShapes = [
-    { matrix: [[1,1,1,1,1]], color: Math.ceil(Math.random()*7), used: false },
-    { matrix: [[1,0],[1,1]], color: Math.ceil(Math.random()*7), used: false },
-    { matrix: [[1,1],[1,1]], color: Math.ceil(Math.random()*7), used: false }
-  ];
-  showToast('🔄 方块已刷新！');
-  render();
-}
-
-function handleRevive() {
-  state.gameStatus = 'playing';
-  // 清除底部2行
-  state.board[6] = Array(8).fill(0);
-  state.board[7] = Array(8).fill(0);
-  state.pendingShapes = [
-    { matrix: [[1,1]], color: Math.ceil(Math.random()*7), used: false },
-    { matrix: [[1],[1]], color: Math.ceil(Math.random()*7), used: false },
-    { matrix: [[1]], color: Math.ceil(Math.random()*7), used: false }
-  ];
-  showToast('复活成功！继续挑战');
-  render();
-}
-
-function handleRestart() {
-  state.gameStatus = 'playing';
-  state.score = 0;
-  state.coins = 100;
-  state.comboCount = 0;
-  state.boosters = { bomb: 3, gravity: 3, refresh: 3 };
-  state.pendingShapes = [
-    { matrix: [[1,1,1],[0,0,1],[0,0,0]], color: 3, used: false },
-    { matrix: [[1,1],[1,0]], color: 5, used: false },
-    { matrix: [[1],[1],[1],[1]], color: 7, used: false }
-  ];
-  initBoard();
-  render();
-  showToast('新游戏开始！');
-}
-
-function handleRetry() {
-  state.errState = 'normal';
-  handleRestart();
-}
-
-function openSettings() { state.showSettings = true; render(); }
-function closeSettings() { state.showSettings = false; render(); }
-function toggleMusic() { state.musicEnabled = !state.musicEnabled; render(); }
-function toggleSfx() { state.sfxEnabled = !state.sfxEnabled; render(); }
-
-// 初始化
-initBoard();
-render();
+initBoard();render();
 </script>
 </body>
 </html>
