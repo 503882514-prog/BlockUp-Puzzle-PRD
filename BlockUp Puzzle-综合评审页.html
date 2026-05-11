@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BlockUp Puzzle · 综合评审页</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #f6f4ef; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; min-height: 100vh; }
+.review-shell { display: flex; min-height: 100vh; }
+
+/* 左栏：切换台 */
+.switch-panel { width: 320px; min-width: 320px; position: sticky; top: 0; height: 100vh; overflow-y: auto; padding: 20px; background: #f0ede8; border-right: 1px solid #e5e2dc; }
+.switch-card { background: rgba(255,255,255,0.95); border-radius: 16px; padding: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.06); }
+.switch-card h2 { font-size: 15px; font-weight: 700; margin-bottom: 2px; }
+.switch-card .subtitle { font-size: 11px; color: #888; margin-bottom: 14px; }
+.s-title { font-size: 12px; font-weight: 600; color: #555; margin: 14px 0 6px; }
+.s-chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.s-chip { padding: 5px 6px; font-size: 11px; border-radius: 6px; border: 1.5px solid #e0e0e0; background: #fff; cursor: pointer; text-align: center; transition: all 0.15s; }
+.s-chip.active { background: #4f46e5; color: #fff; border-color: #4f46e5; }
+.s-chip:hover:not(.active) { border-color: #4f46e5; color: #4f46e5; }
+.s-btn { width: 100%; padding: 9px; background: #4f46e5; color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; margin-top: 14px; }
+.s-btn:hover { background: #4338ca; }
+.s-info { background: #f8f7f5; border-radius: 8px; padding: 10px; margin-top: 10px; font-size: 10px; color: #666; line-height: 1.4; }
+
+/* 中栏：手机 */
+.phone-panel { width: 420px; min-width: 420px; position: sticky; top: 0; height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px 16px; }
+.phone-frame { width: 310px; height: 670px; background: #000; border-radius: 42px; padding: 8px; box-shadow: 0 14px 40px rgba(0,0,0,0.25); position: relative; overflow: hidden; }
+.phone-notch { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); width: 120px; height: 26px; background: #000; border-radius: 0 0 14px 14px; z-index: 100; }
+.phone-status-bar { position: absolute; top: 12px; left: 24px; right: 24px; display: flex; justify-content: space-between; align-items: center; z-index: 101; color: #fff; font-size: 11px; font-weight: 600; }
+.phone-screen { width: 100%; height: 100%; background: #1a1a2e; border-radius: 34px; overflow-y: auto; overflow-x: hidden; position: relative; }
+.phone-home-ind { position: absolute; bottom: 5px; left: 50%; transform: translateX(-50%); width: 100px; height: 4px; background: rgba(255,255,255,0.3); border-radius: 2px; }
+
+/* 游戏UI样式 */
+.g-header { padding: 40px 14px 8px; display: flex; justify-content: space-between; align-items: center; }
+.g-score { text-align: center; }
+.g-score .lbl { font-size: 8px; color: rgba(255,255,255,0.5); text-transform: uppercase; }
+.g-score .val { font-size: 15px; font-weight: 700; color: #fff; }
+.g-coins { display: flex; align-items: center; gap: 3px; background: rgba(255,255,255,0.1); padding: 2px 7px; border-radius: 8px; }
+.g-coins span { color: #ffd700; font-size: 12px; font-weight: 600; }
+.g-board { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; width: 240px; height: 240px; margin: 4px auto; background: rgba(255,255,255,0.05); border-radius: 8px; padding: 3px; }
+.g-cell { border-radius: 3px; background: rgba(255,255,255,0.08); }
+.g-cell.f1 { background: #ef4444; } .g-cell.f2 { background: #f59e0b; }
+.g-cell.f3 { background: #10b981; } .g-cell.f4 { background: #3b82f6; }
+.g-cell.f5 { background: #8b5cf6; } .g-cell.f6 { background: #ec4899; }
+.g-cell.f7 { background: #06b6d4; }
+.g-combo { text-align: center; padding: 4px; opacity: 0; transition: opacity 0.3s; }
+.g-combo.vis { opacity: 1; }
+.g-combo-txt { font-size: 13px; font-weight: 800; color: #ffd700; }
+.g-pending { display: flex; justify-content: center; gap: 10px; padding: 8px 14px; }
+.g-shape { width: 55px; height: 55px; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.05); border-radius: 8px; cursor: pointer; }
+.g-shape:hover { background: rgba(255,255,255,0.1); }
+.g-shape.used { opacity: 0.2; }
+.g-shape-grid { display: grid; gap: 1px; }
+.g-shape-cell { width: 8px; height: 8px; border-radius: 2px; }
+.g-shape-cell.sf { background: currentColor; }
+.g-boosters { display: flex; justify-content: center; gap: 8px; padding: 4px 14px; }
+.g-booster { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 10px; background: rgba(255,255,255,0.08); border-radius: 8px; border: none; cursor: pointer; }
+.g-booster:hover { background: rgba(255,255,255,0.15); }
+.g-booster .gi { font-size: 15px; } .g-booster .gn { font-size: 8px; color: rgba(255,255,255,0.7); }
+.g-booster .gc { font-size: 9px; color: #ffd700; font-weight: 600; }
+.g-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.85); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 200; border-radius: 34px; }
+.g-overlay.vis { display: flex; }
+.g-overlay h3 { font-size: 17px; font-weight: 800; color: #fff; }
+.g-overlay .go-s { font-size: 34px; font-weight: 800; color: #ffd700; margin: 8px 0; }
+.g-overlay .go-b { font-size: 11px; color: rgba(255,255,255,0.5); margin-bottom: 16px; }
+.g-btn-rev { padding: 8px 24px; background: #10b981; color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; margin-bottom: 8px; }
+.g-btn-rst { padding: 8px 24px; background: rgba(255,255,255,0.15); color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.g-toast { position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%); background: rgba(255,255,255,0.95); color: #333; padding: 8px 16px; border-radius: 8px; font-size: 12px; z-index: 300; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+.g-toast.vis { opacity: 1; }
+
+/* 右栏：PRD */
+.doc-panel { flex: 1; min-width: 600px; padding: 40px 48px; overflow-y: auto; height: 100vh; position: relative; }
+.doc-panel h1 { font-size: 28px; font-weight: 800; margin-bottom: 8px; color: #1a1a1a; }
+.doc-panel .meta { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
+.doc-panel .badge { padding: 4px 10px; background: #e8e5ff; color: #4f46e5; border-radius: 6px; font-size: 11px; font-weight: 600; }
+.doc-panel h2 { font-size: 20px; font-weight: 700; margin: 32px 0 12px; color: #1a1a1a; padding-bottom: 6px; border-bottom: 2px solid #e5e2dc; }
+.doc-panel h3 { font-size: 16px; font-weight: 600; margin: 20px 0 8px; color: #333; }
+.doc-panel h4 { font-size: 14px; font-weight: 600; margin: 14px 0 6px; color: #444; }
+.doc-panel p { font-size: 14px; line-height: 1.7; color: #444; margin-bottom: 10px; }
+.doc-panel ul, .doc-panel ol { font-size: 14px; line-height: 1.7; color: #444; margin: 8px 0 12px 20px; }
+.doc-panel li { margin-bottom: 4px; }
+.doc-panel table { width: 100%; border-collapse: collapse; margin: 12px 0 16px; font-size: 13px; }
+.doc-panel th { background: #f3f1ec; padding: 8px 10px; text-align: left; font-weight: 600; border: 1px solid #e5e2dc; }
+.doc-panel td { padding: 8px 10px; border: 1px solid #e5e2dc; }
+.doc-panel .callout { background: #f8f7f5; border-left: 3px solid #4f46e5; padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 12px 0; font-size: 13px; color: #555; }
+.doc-panel .risk-callout { background: #fef9f0; border-left: 3px solid #f59e0b; padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 12px 0; font-size: 13px; }
+
+.toc { position: fixed; right: 24px; top: 24px; width: 180px; background: rgba(255,255,255,0.95); border-radius: 12px; padding: 16px; box-shadow: 0 4px 16px rgba(0,0,0,0.06); max-height: 90vh; overflow-y: auto; z-index: 500; }
+.toc h4 { font-size: 12px; font-weight: 700; margin-bottom: 8px; color: #333; }
+.toc a { display: block; font-size: 11px; color: #666; text-decoration: none; padding: 3px 0; line-height: 1.4; }
+.toc a:hover { color: #4f46e5; }
+.toc a.sub { padding-left: 10px; font-size: 10px; color: #888; }
+</style>
+</head>
+<body>
+<main class="review-shell">
+  <!-- 左栏：切换台 -->
+  <aside class="switch-panel">
+    <div class="switch-card">
+      <h2>BlockUp Puzzle</h2>
+      <p class="subtitle">综合评审 · 切换台</p>
+
+      <div class="s-title">道具类型</div>
+      <div class="s-chips" id="rBoosterChips">
+        <div class="s-chip active" onclick="rSelect(this,'rBoosterChips','bomb')">炸弹</div>
+        <div class="s-chip" onclick="rSelect(this,'rBoosterChips','gravity')">重力</div>
+        <div class="s-chip" onclick="rSelect(this,'rBoosterChips','refresh')">刷新</div>
+      </div>
+
+      <div class="s-title">用户画像</div>
+      <div class="s-chips" id="rUserChips">
+        <div class="s-chip active" onclick="rSelectUser(this,'casual')">休闲玩家</div>
+        <div class="s-chip" onclick="rSelectUser(this,'hardcore')">高分玩家</div>
+      </div>
+
+      <div class="s-title">游戏状态</div>
+      <div class="s-chips" id="rStatusChips">
+        <div class="s-chip active" onclick="rSelectStatus(this,'playing')">进行中</div>
+        <div class="s-chip" onclick="rSelectStatus(this,'gameOver')">游戏结束</div>
+        <div class="s-chip" onclick="rSelectStatus(this,'reviving')">复活中</div>
+      </div>
+
+      <div class="s-title">连击等级</div>
+      <div class="s-chips" id="rComboChips">
+        <div class="s-chip active" onclick="rSelectCombo(this,0)">无连击</div>
+        <div class="s-chip" onclick="rSelectCombo(this,1)">x1</div>
+        <div class="s-chip" onclick="rSelectCombo(this,2)">x2</div>
+        <div class="s-chip" onclick="rSelectCombo(this,3)">x3+</div>
+      </div>
+
+      <div class="s-title">异常态</div>
+      <div class="s-chips" id="rStateChips">
+        <div class="s-chip active" onclick="rSelectErr(this,'normal')">正常</div>
+        <div class="s-chip" onclick="rSelectErr(this,'error')">失败</div>
+        <div class="s-chip" onclick="rSelectErr(this,'empty')">空态</div>
+        <div class="s-chip" onclick="rSelectErr(this,'loading')">加载</div>
+      </div>
+
+      <button class="s-btn" onclick="rApply()">应用到原型</button>
+      <div class="s-info"><strong>切换台说明</strong><br>操作上方选项后点击"应用到原型"，中栏手机将呈现对应状态。手机内按钮可独立点击交互。</div>
+    </div>
+  </aside>
+
+  <!-- 中栏：手机原型 -->
+  <section class="phone-panel">
+    <div class="phone-frame">
+      <div class="phone-notch"></div>
+      <div class="phone-status-bar"><span>9:41</span><span>📶 ▪ 🔋</span></div>
+      <div class="phone-screen" id="rPhone"></div>
+      <div class="phone-home-ind"></div>
+    </div>
+  </section>
+
+  <!-- 右栏：PRD文档 -->
+  <article class="doc-panel" id="docPanel">
+    <div class="meta">
+      <span class="badge">V1.0-Released</span>
+      <span class="badge">公开测试</span>
+      <span class="badge">Web / H5 / PWA</span>
+    </div>
+    <h1>BlockUp Puzzle 产品需求文档</h1>
+    <p style="color:#888;font-size:13px;">DoonDookStudio · 模块 2 PRD · 综合评审用</p>
+
+    <h2 id="ch1">第 1 章 · 文档信息</h2>
+    <table>
+      <tr><th>项</th><th>内容</th></tr>
+      <tr><td>产品名</td><td>BlockUp Puzzle（方块消除益智游戏）</td></tr>
+      <tr><td>版本号</td><td>V1.0-Released</td></tr>
+      <tr><td>负责人</td><td>DoonDookStudio</td></tr>
+      <tr><td>阶段性质</td><td>公开测试</td></tr>
+      <tr><td>目标平台</td><td>Web（H5）/ PWA 多端</td></tr>
+    </table>
+
+    <h2 id="ch2">第 2 章 · 为什么做（Why）</h2>
+    <h3>市场背景</h3>
+    <p>休闲益智品类在移动端和 H5 端持续增长，方块放置类游戏日活跃用户维持在数千万量级。这类游戏具有"即开即玩、单局 3-10 分钟、无需联网"的特点，极其适合碎片化时间。然而市面同类产品道具系统单一、连击反馈感不足、缺乏长线留存设计。</p>
+    <h3>核心痛点</h3>
+    <div class="callout">方块消除类游戏缺乏策略深度和正向反馈，玩家易陷入重复感。</div>
+    <h3>业务目标</h3>
+    <ul>
+      <li>验证"方块放置 + 道具策略 + 连击奖励"组合玩法对用户留存的拉升效果</li>
+      <li>公开测试阶段达到日活 1000+ 并观察 7 日留存率</li>
+    </ul>
+    <h3>成功指标</h3>
+    <table>
+      <tr><th>指标名</th><th>类型</th><th>目标值</th><th>测量周期</th></tr>
+      <tr><td>日活跃用户</td><td>北极星</td><td>1000+</td><td>日</td></tr>
+      <tr><td>次日留存率</td><td>留存</td><td>≥30%</td><td>日</td></tr>
+      <tr><td>平均单局时长</td><td>激活</td><td>3-8 分钟</td><td>周</td></tr>
+      <tr><td>连击触发率</td><td>观察</td><td>≥40% 局含连击</td><td>周</td></tr>
+    </table>
+
+    <h2 id="ch3">第 3 章 · 做给谁（Who）</h2>
+    <h3>主画像</h3>
+    <ul>
+      <li><strong>身份</strong>：休闲益智游戏爱好者，16-45 岁，碎片时间充裕</li>
+      <li><strong>典型场景</strong>：通勤、午休、睡前打开浏览器玩 1-3 局</li>
+      <li><strong>替代方案</strong>：1010!、Blockudoku、俄罗斯方块</li>
+      <li><strong>痛点</strong>：大多数同类游戏道具简单、中期玩法单调</li>
+    </ul>
+    <h3>核心使用场景</h3>
+    <ul>
+      <li>作为休闲玩家，我想快速开始一局消除游戏，以便碎片时间放松</li>
+      <li>作为玩家，我想通过策略放置触发连击，获得更高分数</li>
+      <li>作为玩家，我想在困境时使用道具解围，延长单局寿命</li>
+      <li>作为玩家，我想挑战最高分记录，保持长期动力</li>
+    </ul>
+
+    <h2 id="ch4">第 4 章 · 做什么（What）</h2>
+    <h3>一句话定位</h3>
+    <div class="callout">BlockUp Puzzle 是一款面向休闲玩家的 H5 方块放置消除游戏，通过策略放置、连击奖励和道具系统提供有深度的益智体验。</div>
+    <h3>功能清单</h3>
+    <table>
+      <tr><th>功能组</th><th>功能</th><th>描述</th></tr>
+      <tr><td rowspan="4">核心玩法</td><td>方块放置</td><td>拖拽不同形状方块到棋盘格子上</td></tr>
+      <tr><td>行列消除</td><td>完整行或列自动消除并得分</td></tr>
+      <tr><td>随机方块生成</td><td>每轮生成 3 个随机形状方块</td></tr>
+      <tr><td>游戏结束判定</td><td>无法放置任何待选方块时结束</td></tr>
+      <tr><td rowspan="3">奖励反馈</td><td>连击系统</td><td>连续消除触发连击倍数奖励</td></tr>
+      <tr><td>分数记录</td><td>记录本局和历史最高分</td></tr>
+      <tr><td>视觉特效</td><td>消除、连击时播放粒子动画</td></tr>
+      <tr><td rowspan="5">道具经济</td><td>炸弹道具</td><td>清除指定区域方块（120金币）</td></tr>
+      <tr><td>重力道具</td><td>悬空方块下落填补空隙（200金币）</td></tr>
+      <tr><td>刷新道具</td><td>替换待放置方块（150金币）</td></tr>
+      <tr><td>金币系统</td><td>游戏中获取消耗金币</td></tr>
+      <tr><td>复活机制</td><td>游戏结束时可继续本局</td></tr>
+    </table>
+
+    <h2 id="ch5">第 5 章 · 怎么做（技术意图）</h2>
+    <h3>技术路线总览</h3>
+    <p>纯前端 H5 方案，基于 Scirra Construct 游戏引擎。单页 Web 应用，无后端服务器。游戏逻辑、资源加载、状态管理全部在浏览器端完成。数据通过 localStorage 持久化。支持 PWA 标准，可离线运行。</p>
+    <h3>AI 与规则分工</h3>
+    <div class="callout">本产品无 AI 决策，所有业务逻辑由固定规则实现。</div>
+    <table>
+      <tr><th>决策</th><th>由谁</th><th>原因</th></tr>
+      <tr><td>方块随机生成</td><td>规则</td><td>37 种预定义形状等概率随机</td></tr>
+      <tr><td>行列消除判定</td><td>规则</td><td>填满检测是确定性逻辑</td></tr>
+      <tr><td>连击与计分</td><td>规则</td><td>固定公式计算</td></tr>
+      <tr><td>游戏结束判定</td><td>规则</td><td>确定性遍历计算</td></tr>
+      <tr><td>道具效果</td><td>规则</td><td>效果明确无需智能决策</td></tr>
+    </table>
+
+    <h2 id="ch6">第 6 章 · 不做什么（Why-not）</h2>
+    <table>
+      <tr><th>事项</th><th>为什么不做</th><th>类型</th></tr>
+      <tr><td>多人对战/排行榜联网</td><td>定位为单人休闲，联网增加复杂度</td><td>产品能力边界</td></tr>
+      <tr><td>付费关卡/付费解锁</td><td>当前验证玩法阶段</td><td>时段限制</td></tr>
+      <tr><td>自定义主题/皮肤</td><td>非核心玩法</td><td>时段限制</td></tr>
+      <tr><td>社交分享/好友系统</td><td>无后端能力</td><td>产品能力边界</td></tr>
+    </table>
+    <h3>未来规划</h3>
+    <ul>
+      <li>每日挑战模式 — V2.0</li>
+      <li>主题皮肤系统 — V2.0</li>
+      <li>全球排行榜 — V2.5</li>
+      <li>成就系统 — V2.0</li>
+    </ul>
+
+    <h2 id="ch7">第 7 章 · 合规与风险</h2>
+    <div class="risk-callout">
+      <strong>AI 特有风险</strong>：本产品无 AI 生成内容，五类 AI 风险均不涉及。所有游戏逻辑为确定性规则，不收集个人信息，不追踪用户行为。
+    </div>
+    <h3>责任边界</h3>
+    <ul>
+      <li>本游戏为休闲娱乐产品，不构成任何形式的建议</li>
+      <li>虚拟金币无真实货币价值，不可兑换转让</li>
+      <li>游戏进度基于浏览器本地存储，清除数据将丢失进度</li>
+    </ul>
+
+    <h2 id="ch8">第 8 章 · 下游转译输入</h2>
+    <h3>核心业务维度</h3>
+    <table>
+      <tr><th>维度名</th><th>可选值</th><th>用于控制台</th></tr>
+      <tr><td>方块形状</td><td>单格、双格、L形、T形、Z形、田字、长条、复合形状</td><td>否</td></tr>
+      <tr><td>道具类型</td><td>炸弹、重力、刷新</td><td>是</td></tr>
+      <tr><td>游戏状态</td><td>进行中、游戏结束、复活中</td><td>是</td></tr>
+      <tr><td>连击等级</td><td>无连击、x1、x2、x3+</td><td>是</td></tr>
+    </table>
+    <h3>技术选型口径</h3>
+    <table>
+      <tr><th>项</th><th>口径</th></tr>
+      <tr><td>目标平台</td><td>Web（H5）/ PWA 多端</td></tr>
+      <tr><td>前端形态</td><td>Scirra Construct 导出 H5（Canvas 渲染）</td></tr>
+      <tr><td>后端与存储</td><td>无后端 / localStorage</td></tr>
+      <tr><td>AI 调用方</td><td>无 AI 调用</td></tr>
+      <tr><td>外部服务</td><td>Azerion SDK（广告，可选）</td></tr>
+    </table>
+  </article>
+</main>
+
+<!-- TOC -->
+<nav class="toc">
+  <h4>目录</h4>
+  <a href="#ch1">第 1 章 · 文档信息</a>
+  <a href="#ch2">第 2 章 · 为什么做</a>
+  <a href="#ch3">第 3 章 · 做给谁</a>
+  <a href="#ch4">第 4 章 · 做什么</a>
+  <a href="#ch5">第 5 章 · 怎么做</a>
+  <a href="#ch6">第 6 章 · 不做什么</a>
+  <a href="#ch7">第 7 章 · 合规与风险</a>
+  <a href="#ch8">第 8 章 · 下游转译</a>
+</nav>
+
+<script>
+// 游戏状态
+window.gs = {
+  gameStatus: 'playing', errState: 'normal', score: 1280, bestScore: 3560, coins: 450,
+  comboCount: 0, userType: 'casual', board: [],
+  pendingShapes: [
+    { matrix: [[1,1,1],[0,0,1]], color: 3, used: false },
+    { matrix: [[1,1],[1,0]], color: 5, used: false },
+    { matrix: [[1],[1],[1],[1]], color: 7, used: false }
+  ],
+  boosters: { bomb: 3, gravity: 3, refresh: 3 }
+};
+
+function initGBoard() {
+  if (gs.userType === 'casual') {
+    gs.board = [[0,0,0,1,2,0,3,4],[0,0,1,1,0,0,0,4],[0,0,0,0,5,5,0,0],[6,6,0,0,5,0,0,7],[6,0,0,0,0,0,0,7],[0,0,2,2,2,0,0,7],[3,3,3,0,0,4,4,0],[1,1,1,1,1,1,1,0]];
+  } else {
+    gs.board = [[1,2,3,1,2,0,3,4],[5,6,1,1,7,2,3,4],[4,3,2,5,5,5,6,7],[6,6,1,2,5,3,4,7],[6,7,3,4,2,1,5,7],[1,2,2,2,2,6,3,7],[3,3,3,5,6,4,4,1],[1,1,1,1,1,1,1,0]];
+    gs.score = 4820; gs.coins = 120; gs.comboCount = 3;
+  }
+}
+
+// 切换台交互
+function rSelect(el, groupId) {
+  document.querySelectorAll(`#${groupId} .s-chip`).forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+}
+function rSelectUser(el, type) {
+  rSelect(el, 'rUserChips'); gs.userType = type;
+  if (type === 'hardcore') { gs.score = 4820; gs.coins = 120; gs.comboCount = 3; }
+  else { gs.score = 1280; gs.coins = 450; gs.comboCount = 0; }
+}
+function rSelectStatus(el, status) { rSelect(el, 'rStatusChips'); gs.gameStatus = status; }
+function rSelectCombo(el, n) { rSelect(el, 'rComboChips'); gs.comboCount = n; }
+function rSelectErr(el, s) { rSelect(el, 'rStateChips'); gs.errState = s; }
+function rApply() { initGBoard(); rRender(); }
+
+function rToast(text) {
+  const t = document.getElementById('rToast');
+  if (t) { t.textContent = text; t.classList.add('vis'); setTimeout(() => t.classList.remove('vis'), 2000); }
+}
+
+function rRender() {
+  const screen = document.getElementById('rPhone');
+
+  if (gs.errState === 'empty') {
+    screen.innerHTML = `<div class="g-header"><div class="g-score"><div class="lbl">分数</div><div class="val">0</div></div><div class="g-coins">🪙 <span>0</span></div><div class="g-score"><div class="lbl">最高分</div><div class="val">0</div></div></div><div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:300px;color:rgba(255,255,255,0.4);"><div style="font-size:40px;margin-bottom:10px;">🧩</div><div style="font-size:13px;">点击开始游戏</div><button onclick="rStartGame()" style="margin-top:14px;padding:10px 28px;background:#4f46e5;color:#fff;border:none;border-radius:10px;font-size:13px;cursor:pointer;">开始游戏</button></div><div class="g-toast" id="rToast"></div>`;
+    return;
+  }
+  if (gs.errState === 'loading') {
+    screen.innerHTML = `<div class="g-header"><div class="g-score"><div class="lbl">分数</div><div class="val">---</div></div><div class="g-coins">🪙 <span>---</span></div><div class="g-score"><div class="lbl">最高分</div><div class="val">---</div></div></div><div style="position:relative;height:300px;display:flex;align-items:center;justify-content:center;"><div style="width:36px;height:36px;border:3px solid rgba(255,255,255,0.2);border-top-color:#4f46e5;border-radius:50%;animation:spin 0.8s linear infinite;"></div></div><div style="text-align:center;color:rgba(255,255,255,0.5);font-size:12px;">加载游戏资源中...</div><div class="g-toast" id="rToast"></div>`;
+    return;
+  }
+  if (gs.errState === 'error') {
+    screen.innerHTML = `<div class="g-header"><div class="g-score"><div class="lbl">分数</div><div class="val">${gs.score}</div></div><div class="g-coins">🪙 <span>${gs.coins}</span></div><div class="g-score"><div class="lbl">最高分</div><div class="val">${gs.bestScore}</div></div></div><div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px;text-align:center;"><div style="font-size:40px;margin-bottom:10px;">⚠️</div><div style="font-size:14px;font-weight:600;color:#ef4444;margin-bottom:6px;">游戏数据加载失败</div><div style="font-size:12px;color:rgba(255,255,255,0.5);margin-bottom:14px;">本地存储数据损坏，请重新开始</div><button onclick="rRestart()" style="padding:9px 18px;background:#4f46e5;color:#fff;border:none;border-radius:8px;font-size:12px;cursor:pointer;">重新开始</button></div><div class="g-toast" id="rToast"></div>`;
+    return;
+  }
+
+  // 正常态
+  let bHTML = '';
+  for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+    const v = gs.board[r][c];
+    bHTML += `<div class="g-cell ${v > 0 ? 'f'+v : ''}" onclick="rCellClick(${r},${c})"></div>`;
+  }
+
+  const colors = ['','#ef4444','#f59e0b','#10b981','#3b82f6','#8b5cf6','#ec4899','#06b6d4'];
+  let shapesHTML = gs.pendingShapes.map((sh, i) => {
+    const cols = sh.matrix[0].length;
+    let cells = '';
+    sh.matrix.forEach(row => row.forEach(v => { cells += `<div class="g-shape-cell ${v ? 'sf' : ''}" style="color:${colors[sh.color]}"></div>`; }));
+    return `<div class="g-shape ${sh.used ? 'used' : ''}" onclick="rShapeClick(${i})"><div class="g-shape-grid" style="grid-template-columns:repeat(${cols},1fr);">${cells}</div></div>`;
+  }).join('');
+
+  screen.innerHTML = `
+    <div class="g-header"><div class="g-score"><div class="lbl">分数</div><div class="val">${gs.score}</div></div><div class="g-coins">🪙 <span>${gs.coins}</span></div><div class="g-score"><div class="lbl">最高分</div><div class="val">${gs.bestScore}</div></div></div>
+    <div class="g-combo ${gs.comboCount > 0 ? 'vis' : ''}"><div class="g-combo-txt">🔥 Combo x${gs.comboCount}</div></div>
+    <div class="g-board">${bHTML}</div>
+    <div class="g-pending">${shapesHTML}</div>
+    <div class="g-boosters">
+      <button class="g-booster" onclick="rUseBomb()"><span class="gi">💣</span><span class="gn">炸弹</span><span class="gc">×${gs.boosters.bomb}</span></button>
+      <button class="g-booster" onclick="rUseGravity()"><span class="gi">⬇️</span><span class="gn">重力</span><span class="gc">×${gs.boosters.gravity}</span></button>
+      <button class="g-booster" onclick="rUseRefresh()"><span class="gi">🔄</span><span class="gn">刷新</span><span class="gc">×${gs.boosters.refresh}</span></button>
+    </div>
+    <div class="g-overlay ${gs.gameStatus === 'gameOver' || gs.gameStatus === 'reviving' ? 'vis' : ''}">
+      <h3>游戏结束</h3><div class="go-s">${gs.score}</div><div class="go-b">最高分：${gs.bestScore}</div>
+      ${gs.gameStatus === 'reviving' ? '<button class="g-btn-rev" onclick="rRevive()">复活继续</button>' : ''}
+      <button class="g-btn-rst" onclick="rRestart()">重新开始</button>
+    </div>
+    <div class="g-toast" id="rToast"></div>`;
+}
+
+function rStartGame() { gs.errState = 'normal'; gs.gameStatus = 'playing'; gs.score = 0; gs.coins = 100; initGBoard(); rRender(); rToast('游戏开始！'); }
+function rCellClick(r, c) { if (gs.board[r][c] > 0) rToast(`(${r+1},${c+1}) 已有方块`); }
+function rShapeClick(i) {
+  if (gs.pendingShapes[i].used) return;
+  gs.pendingShapes[i].used = true; gs.score += 10;
+  const sh = gs.pendingShapes[i];
+  const row = Math.floor(Math.random()*5), col = Math.floor(Math.random()*5);
+  sh.matrix.forEach((r,ri) => r.forEach((v,ci) => { if (v && row+ri<8 && col+ci<8) gs.board[row+ri][col+ci] = sh.color; }));
+  if (gs.pendingShapes.every(s => s.used)) {
+    gs.pendingShapes = [
+      { matrix: [[1,1],[1,1]], color: Math.ceil(Math.random()*7), used: false },
+      { matrix: [[1,1,1]], color: Math.ceil(Math.random()*7), used: false },
+      { matrix: [[1],[1],[1]], color: Math.ceil(Math.random()*7), used: false }
+    ];
+  }
+  rCheckClear(); rRender();
+}
+function rCheckClear() {
+  let cl = 0;
+  for (let r = 0; r < 8; r++) if (gs.board[r].every(v => v > 0)) { gs.board[r] = Array(8).fill(0); cl++; }
+  for (let c = 0; c < 8; c++) if (gs.board.every(row => row[c] > 0)) { gs.board.forEach(row => row[c] = 0); cl++; }
+  if (cl > 0) { gs.comboCount++; gs.score += cl * 10 * (1 + gs.comboCount * 0.5); gs.coins += cl * 5; rToast(`消除 ${cl} 行！Combo x${gs.comboCount}`); } else { gs.comboCount = 0; }
+}
+function rUseBomb() { if (gs.boosters.bomb <= 0) { rToast('炸弹已用完'); return; } if (gs.coins < 120) { rToast('金币不足'); return; } gs.boosters.bomb--; gs.coins -= 120; for (let r=3;r<6;r++) for (let c=3;c<6;c++) gs.board[r][c]=0; rToast('💣 炸弹使用成功！'); rRender(); }
+function rUseGravity() { if (gs.boosters.gravity <= 0) { rToast('重力已用完'); return; } if (gs.coins < 200) { rToast('金币不足'); return; } gs.boosters.gravity--; gs.coins -= 200; for (let c=0;c<8;c++) { let s=[]; for (let r=0;r<8;r++) if (gs.board[r][c]>0) s.push(gs.board[r][c]); for (let r=0;r<8;r++) gs.board[r][c] = r<8-s.length ? 0 : s[r-(8-s.length)]; } rCheckClear(); rToast('⬇️ 重力执行！'); rRender(); }
+function rUseRefresh() { if (gs.boosters.refresh <= 0) { rToast('刷新已用完'); return; } if (gs.coins < 150) { rToast('金币不足'); return; } gs.boosters.refresh--; gs.coins -= 150; gs.pendingShapes = [{ matrix:[[1,1,1,1,1]],color:Math.ceil(Math.random()*7),used:false },{ matrix:[[1,0],[1,1]],color:Math.ceil(Math.random()*7),used:false },{ matrix:[[1,1],[1,1]],color:Math.ceil(Math.random()*7),used:false }]; rToast('🔄 已刷新！'); rRender(); }
+function rRevive() { gs.gameStatus = 'playing'; gs.board[6]=Array(8).fill(0); gs.board[7]=Array(8).fill(0); gs.pendingShapes=[{matrix:[[1,1]],color:Math.ceil(Math.random()*7),used:false},{matrix:[[1],[1]],color:Math.ceil(Math.random()*7),used:false},{matrix:[[1]],color:Math.ceil(Math.random()*7),used:false}]; rToast('复活成功！'); rRender(); }
+function rRestart() { gs.gameStatus='playing'; gs.errState='normal'; gs.score=0; gs.coins=100; gs.comboCount=0; gs.boosters={bomb:3,gravity:3,refresh:3}; gs.pendingShapes=[{matrix:[[1,1,1],[0,0,1]],color:3,used:false},{matrix:[[1,1],[1,0]],color:5,used:false},{matrix:[[1],[1],[1],[1]],color:7,used:false}]; initGBoard(); rRender(); rToast('新游戏开始！'); }
+
+// TOC 平滑滚动
+document.querySelectorAll('.toc a').forEach(a => {
+  a.addEventListener('click', e => {
+    e.preventDefault();
+    const id = a.getAttribute('href').substring(1);
+    document.getElementById(id).scrollIntoView({ behavior: 'smooth' });
+  });
+});
+
+// 初始化
+initGBoard(); rRender();
+</script>
+</body>
+</html>

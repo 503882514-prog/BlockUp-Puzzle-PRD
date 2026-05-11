@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BlockUp Puzzle · 交互原型</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #f6f4ef; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; min-height: 100vh; display: flex; justify-content: center; align-items: flex-start; padding: 24px; }
+.demo-stage { display: flex; gap: 36px; align-items: flex-start; max-width: 1200px; width: 100%; }
+.control-panel { width: 300px; min-width: 300px; position: sticky; top: 24px; }
+.control-card { background: rgba(255,255,255,0.95); border-radius: 20px; padding: 24px; box-shadow: 0 8px 32px rgba(0,0,0,0.08); }
+.control-card h2 { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+.control-card .subtitle { font-size: 12px; color: #888; margin-bottom: 16px; }
+.section-title { font-size: 13px; font-weight: 600; color: #555; margin: 16px 0 8px; }
+.chip-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.chip { padding: 6px 8px; font-size: 12px; border-radius: 8px; border: 1.5px solid #e0e0e0; background: #fff; cursor: pointer; text-align: center; transition: all 0.15s; }
+.chip.active { background: #4f46e5; color: #fff; border-color: #4f46e5; }
+.chip:hover:not(.active) { border-color: #4f46e5; color: #4f46e5; }
+.btn-apply { width: 100%; padding: 10px; background: #4f46e5; color: #fff; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 16px; transition: background 0.15s; }
+.btn-apply:hover { background: #4338ca; }
+.info-card { background: #f8f7f5; border-radius: 10px; padding: 12px; margin-top: 12px; font-size: 11px; color: #666; line-height: 1.5; }
+
+.phone-wrapper { position: sticky; top: 24px; }
+.phone-frame { width: 390px; height: 844px; background: #000; border-radius: 52px; padding: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.25); position: relative; overflow: hidden; }
+.phone-notch { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); width: 160px; height: 34px; background: #000; border-radius: 0 0 18px 18px; z-index: 100; }
+.phone-status-bar { position: absolute; top: 16px; left: 32px; right: 32px; display: flex; justify-content: space-between; align-items: center; z-index: 101; color: #fff; font-size: 13px; font-weight: 600; }
+.phone-screen { width: 100%; height: 100%; background: #1a1a2e; border-radius: 40px; overflow-y: auto; overflow-x: hidden; position: relative; }
+.phone-home-indicator { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); width: 134px; height: 5px; background: rgba(255,255,255,0.3); border-radius: 3px; }
+
+.game-header { padding: 56px 20px 12px; display: flex; justify-content: space-between; align-items: center; }
+.score-box { text-align: center; }
+.score-box .label { font-size: 10px; color: rgba(255,255,255,0.6); text-transform: uppercase; }
+.score-box .value { font-size: 20px; font-weight: 700; color: #fff; }
+.coins-box { display: flex; align-items: center; gap: 4px; background: rgba(255,255,255,0.1); padding: 4px 10px; border-radius: 12px; }
+.coins-box span { color: #ffd700; font-size: 14px; font-weight: 600; }
+
+.board-container { padding: 8px 16px; display: flex; justify-content: center; }
+.board { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; width: 320px; height: 320px; background: rgba(255,255,255,0.05); border-radius: 12px; padding: 4px; }
+.cell { border-radius: 4px; background: rgba(255,255,255,0.08); transition: all 0.15s; }
+.cell.filled-1 { background: #ef4444; }
+.cell.filled-2 { background: #f59e0b; }
+.cell.filled-3 { background: #10b981; }
+.cell.filled-4 { background: #3b82f6; }
+.cell.filled-5 { background: #8b5cf6; }
+.cell.filled-6 { background: #ec4899; }
+.cell.filled-7 { background: #06b6d4; }
+.cell.clearing { animation: clearPulse 0.4s ease-out; background: #fff; }
+@keyframes clearPulse { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(0.5); opacity: 0; } }
+
+.combo-panel { text-align: center; padding: 8px 20px; opacity: 0; transition: opacity 0.3s; }
+.combo-panel.visible { opacity: 1; }
+.combo-text { font-size: 18px; font-weight: 800; color: #ffd700; text-shadow: 0 0 10px rgba(255,215,0,0.5); }
+.combo-bar { height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; margin-top: 6px; overflow: hidden; }
+.combo-bar-fill { height: 100%; background: linear-gradient(90deg, #ffd700, #ff6b6b); border-radius: 2px; transition: width 0.3s; }
+
+.pending-shapes { display: flex; justify-content: center; gap: 16px; padding: 16px 20px; }
+.pending-shape { width: 80px; height: 80px; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.05); border-radius: 12px; cursor: grab; transition: all 0.15s; }
+.pending-shape:hover { background: rgba(255,255,255,0.1); transform: scale(1.05); }
+.pending-shape.used { opacity: 0.2; pointer-events: none; }
+.shape-grid { display: grid; gap: 1px; }
+.shape-cell { width: 12px; height: 12px; border-radius: 2px; }
+.shape-cell.filled { background: currentColor; }
+
+.booster-bar { display: flex; justify-content: center; gap: 12px; padding: 8px 20px; }
+.booster-btn { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 14px; background: rgba(255,255,255,0.08); border-radius: 12px; border: none; cursor: pointer; transition: all 0.15s; }
+.booster-btn:hover { background: rgba(255,255,255,0.15); }
+.booster-btn .icon { font-size: 22px; }
+.booster-btn .name { font-size: 10px; color: rgba(255,255,255,0.7); }
+.booster-btn .count { font-size: 11px; color: #ffd700; font-weight: 600; }
+.booster-btn.disabled { opacity: 0.4; pointer-events: none; }
+
+.settings-btn { position: absolute; top: 56px; right: 20px; background: none; border: none; font-size: 20px; cursor: pointer; z-index: 50; }
+
+.overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.85); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 200; border-radius: 40px; display: none; }
+.overlay.visible { display: flex; }
+.overlay h3 { font-size: 24px; font-weight: 800; color: #fff; margin-bottom: 8px; }
+.overlay .go-score { font-size: 48px; font-weight: 800; color: #ffd700; margin: 12px 0; }
+.overlay .go-best { font-size: 14px; color: rgba(255,255,255,0.6); margin-bottom: 24px; }
+.overlay .btn-revive { padding: 12px 32px; background: #10b981; color: #fff; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer; margin-bottom: 12px; }
+.overlay .btn-restart { padding: 12px 32px; background: rgba(255,255,255,0.15); color: #fff; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer; }
+.overlay .revive-timer { font-size: 12px; color: rgba(255,255,255,0.5); margin-top: 8px; }
+
+.settings-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.85); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 200; border-radius: 40px; display: none; }
+.settings-overlay.visible { display: flex; }
+.settings-overlay h3 { font-size: 20px; font-weight: 700; color: #fff; margin-bottom: 24px; }
+.setting-row { display: flex; align-items: center; justify-content: space-between; width: 240px; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.1); }
+.setting-row span { color: #fff; font-size: 14px; }
+.toggle { width: 44px; height: 24px; border-radius: 12px; background: rgba(255,255,255,0.2); cursor: pointer; position: relative; transition: background 0.2s; }
+.toggle.on { background: #4f46e5; }
+.toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: transform 0.2s; }
+.toggle.on::after { transform: translateX(20px); }
+.btn-close-settings { margin-top: 24px; padding: 10px 24px; background: rgba(255,255,255,0.15); color: #fff; border: none; border-radius: 10px; font-size: 14px; cursor: pointer; }
+
+.toast { position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%); background: rgba(255,255,255,0.95); color: #333; padding: 10px 20px; border-radius: 10px; font-size: 13px; font-weight: 500; z-index: 300; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+.toast.visible { opacity: 1; }
+
+.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 300px; color: rgba(255,255,255,0.4); }
+.empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+.empty-state .text { font-size: 14px; }
+
+.loading-state .board { opacity: 0.3; }
+.loading-spinner { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 40px; height: 40px; border: 3px solid rgba(255,255,255,0.2); border-top-color: #4f46e5; border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: translate(-50%, -50%) rotate(360deg); } }
+
+.error-state { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 20px; text-align: center; }
+.error-state .icon { font-size: 48px; margin-bottom: 12px; }
+.error-state .title { font-size: 16px; font-weight: 600; color: #ef4444; margin-bottom: 8px; }
+.error-state .desc { font-size: 13px; color: rgba(255,255,255,0.5); margin-bottom: 16px; }
+.error-state .btn-retry { padding: 10px 20px; background: #4f46e5; color: #fff; border: none; border-radius: 10px; font-size: 13px; cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="demo-stage">
+  <!-- 左侧控制台 -->
+  <div class="control-panel">
+    <div class="control-card">
+      <h2>BlockUp Puzzle</h2>
+      <p class="subtitle">交互原型控制台</p>
+
+      <div class="section-title">道具类型</div>
+      <div class="chip-grid" id="boosterChips">
+        <div class="chip active" data-booster="bomb" onclick="selectBooster('bomb')">炸弹</div>
+        <div class="chip" data-booster="gravity" onclick="selectBooster('gravity')">重力</div>
+        <div class="chip" data-booster="refresh" onclick="selectBooster('refresh')">刷新</div>
+      </div>
+
+      <div class="section-title">用户画像</div>
+      <div class="chip-grid" id="userChips">
+        <div class="chip active" data-user="casual" onclick="selectUser('casual')">休闲玩家</div>
+        <div class="chip" data-user="hardcore" onclick="selectUser('hardcore')">高分玩家</div>
+      </div>
+
+      <div class="section-title">游戏状态</div>
+      <div class="chip-grid" id="statusChips">
+        <div class="chip active" data-status="playing" onclick="selectStatus('playing')">进行中</div>
+        <div class="chip" data-status="gameOver" onclick="selectStatus('gameOver')">游戏结束</div>
+        <div class="chip" data-status="reviving" onclick="selectStatus('reviving')">复活中</div>
+      </div>
+
+      <div class="section-title">连击等级</div>
+      <div class="chip-grid" id="comboChips">
+        <div class="chip active" data-combo="0" onclick="selectCombo(0)">无连击</div>
+        <div class="chip" data-combo="1" onclick="selectCombo(1)">x1</div>
+        <div class="chip" data-combo="2" onclick="selectCombo(2)">x2</div>
+        <div class="chip" data-combo="3" onclick="selectCombo(3)">x3+</div>
+      </div>
+
+      <div class="section-title">异常态</div>
+      <div class="chip-grid" id="stateChips">
+        <div class="chip active" data-state="normal" onclick="selectState('normal')">正常</div>
+        <div class="chip" data-state="error" onclick="selectState('error')">失败</div>
+        <div class="chip" data-state="empty" onclick="selectState('empty')">空态</div>
+        <div class="chip" data-state="loading" onclick="selectState('loading')">加载</div>
+      </div>
+
+      <button class="btn-apply" onclick="applyToPrototype()">应用到原型</button>
+
+      <div class="info-card">
+        <strong>控制台说明</strong><br>
+        切换上方选项可改变右侧手机原型的显示状态。手机内的按钮、方块、道具均可点击交互。主流程可在手机内独立走通。
+      </div>
+    </div>
+  </div>
+
+  <!-- 右侧手机 -->
+  <div class="phone-wrapper">
+    <div class="phone-frame">
+      <div class="phone-notch"></div>
+      <div class="phone-status-bar">
+        <span>9:41</span>
+        <span>📶 ▪ 🔋</span>
+      </div>
+      <div class="phone-screen" id="phoneScreen">
+        <!-- 游戏内容由JS渲染 -->
+      </div>
+      <div class="phone-home-indicator"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// 全局状态
+window.state = {
+  gameStatus: 'playing',
+  errState: 'normal',
+  score: 1280,
+  bestScore: 3560,
+  coins: 450,
+  comboCount: 0,
+  boosterHighlight: 'bomb',
+  userType: 'casual',
+  musicEnabled: true,
+  sfxEnabled: true,
+  showSettings: false,
+  board: [],
+  pendingShapes: [
+    { matrix: [[1,1,1],[0,0,1],[0,0,0]], color: 3, used: false },
+    { matrix: [[1,1],[1,0]], color: 5, used: false },
+    { matrix: [[1],[1],[1],[1]], color: 7, used: false }
+  ],
+  boosters: { bomb: 3, gravity: 3, refresh: 3 },
+  reviveTimer: 10
+};
+
+// 初始化棋盘
+function initBoard() {
+  let board = Array(8).fill(null).map(() => Array(8).fill(0));
+  // 预设一些方块制造游戏中状态
+  const preset = [
+    [0,0,0,1,2,0,3,4],[0,0,1,1,0,0,0,4],[0,0,0,0,5,5,0,0],
+    [6,6,0,0,5,0,0,7],[6,0,0,0,0,0,0,7],[0,0,2,2,2,0,0,7],
+    [3,3,3,0,0,4,4,0],[1,1,1,1,1,1,1,0]
+  ];
+  // 休闲玩家看到较多空位
+  if (state.userType === 'casual') {
+    board = preset.map(row => row.map(v => v));
+    board[7] = [1,1,1,1,1,1,1,0]; // 接近完成的行
+  } else {
+    // 高分玩家棋盘更满
+    board = [
+      [1,2,3,1,2,0,3,4],[5,6,1,1,7,2,3,4],[4,3,2,5,5,5,6,7],
+      [6,6,1,2,5,3,4,7],[6,7,3,4,2,1,5,7],[1,2,2,2,2,6,3,7],
+      [3,3,3,5,6,4,4,1],[1,1,1,1,1,1,1,0]
+    ];
+  }
+  state.board = board;
+}
+
+// 控制台交互
+function selectBooster(type) {
+  document.querySelectorAll('#boosterChips .chip').forEach(c => c.classList.remove('active'));
+  document.querySelector(`[data-booster="${type}"]`).classList.add('active');
+  state.boosterHighlight = type;
+}
+function selectUser(type) {
+  document.querySelectorAll('#userChips .chip').forEach(c => c.classList.remove('active'));
+  document.querySelector(`[data-user="${type}"]`).classList.add('active');
+  state.userType = type;
+  if (type === 'hardcore') { state.score = 4820; state.coins = 120; state.comboCount = 3; }
+  else { state.score = 1280; state.coins = 450; state.comboCount = 0; }
+}
+function selectStatus(status) {
+  document.querySelectorAll('#statusChips .chip').forEach(c => c.classList.remove('active'));
+  document.querySelector(`[data-status="${status}"]`).classList.add('active');
+  state.gameStatus = status;
+}
+function selectCombo(n) {
+  document.querySelectorAll('#comboChips .chip').forEach(c => c.classList.remove('active'));
+  document.querySelector(`[data-combo="${n}"]`).classList.add('active');
+  state.comboCount = n;
+}
+function selectState(s) {
+  document.querySelectorAll('#stateChips .chip').forEach(c => c.classList.remove('active'));
+  document.querySelector(`[data-state="${s}"]`).classList.add('active');
+  state.errState = s;
+}
+function applyToPrototype() { initBoard(); render(); }
+
+// Toast
+function showToast(text) {
+  const t = document.getElementById('gameToast');
+  if (t) { t.textContent = text; t.classList.add('visible'); setTimeout(() => t.classList.remove('visible'), 2000); }
+}
+
+// 渲染手机屏幕
+function render() {
+  const screen = document.getElementById('phoneScreen');
+
+  if (state.errState === 'empty') {
+    screen.innerHTML = `
+      <div class="game-header"><div class="score-box"><div class="label">分数</div><div class="value">0</div></div><div class="coins-box">🪙 <span>0</span></div><div class="score-box"><div class="label">最高分</div><div class="value">0</div></div></div>
+      <div class="empty-state"><div class="icon">🧩</div><div class="text">点击下方开始游戏</div><button onclick="startGame()" style="margin-top:16px;padding:12px 32px;background:#4f46e5;color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:600;cursor:pointer;">开始游戏</button></div>
+      <div class="toast" id="gameToast"></div>`;
+    return;
+  }
+
+  if (state.errState === 'loading') {
+    screen.innerHTML = `
+      <div class="game-header"><div class="score-box"><div class="label">分数</div><div class="value">---</div></div><div class="coins-box">🪙 <span>---</span></div><div class="score-box"><div class="label">最高分</div><div class="value">---</div></div></div>
+      <div style="position:relative;height:340px;" class="loading-state"><div class="board-container"><div class="board">${Array(64).fill('<div class="cell" style="opacity:0.3;"></div>').join('')}</div></div><div class="loading-spinner"></div></div>
+      <div style="text-align:center;color:rgba(255,255,255,0.5);font-size:13px;margin-top:12px;">加载游戏资源中...</div>
+      <div class="toast" id="gameToast"></div>`;
+    return;
+  }
+
+  if (state.errState === 'error') {
+    screen.innerHTML = `
+      <div class="game-header"><div class="score-box"><div class="label">分数</div><div class="value">${state.score}</div></div><div class="coins-box">🪙 <span>${state.coins}</span></div><div class="score-box"><div class="label">最高分</div><div class="value">${state.bestScore}</div></div></div>
+      <div class="error-state"><div class="icon">⚠️</div><div class="title">游戏数据加载失败</div><div class="desc">本地存储数据损坏，请重新开始游戏</div><button class="btn-retry" onclick="handleRetry()">重新开始</button></div>
+      <div class="toast" id="gameToast"></div>`;
+    return;
+  }
+
+  // 正常态
+  let boardHTML = '';
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const v = state.board[r][c];
+      const cls = v > 0 ? `cell filled-${v}` : 'cell';
+      boardHTML += `<div class="${cls}" data-r="${r}" data-c="${c}" onclick="handleCellClick(${r},${c})"></div>`;
+    }
+  }
+
+  let shapesHTML = state.pendingShapes.map((shape, idx) => {
+    const cols = shape.matrix[0].length;
+    const rows = shape.matrix.length;
+    let cells = '';
+    const colors = ['','#ef4444','#f59e0b','#10b981','#3b82f6','#8b5cf6','#ec4899','#06b6d4'];
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        cells += `<div class="shape-cell ${shape.matrix[r][c] ? 'filled' : ''}" style="color:${colors[shape.color]}"></div>`;
+      }
+    }
+    return `<div class="pending-shape ${shape.used ? 'used' : ''}" onclick="handleShapeClick(${idx})" style="color:${colors[shape.color]}"><div class="shape-grid" style="grid-template-columns:repeat(${cols},1fr);">${cells}</div></div>`;
+  }).join('');
+
+  const comboVisible = state.comboCount > 0 ? 'visible' : '';
+  const comboWidth = Math.min(state.comboCount * 33, 100);
+
+  screen.innerHTML = `
+    <div class="game-header">
+      <div class="score-box"><div class="label">分数</div><div class="value">${state.score}</div></div>
+      <div class="coins-box">🪙 <span>${state.coins}</span></div>
+      <div class="score-box"><div class="label">最高分</div><div class="value">${state.bestScore}</div></div>
+    </div>
+    <button class="settings-btn" onclick="openSettings()">⚙️</button>
+    <div class="combo-panel ${comboVisible}">
+      <div class="combo-text">🔥 Combo x${state.comboCount}</div>
+      <div class="combo-bar"><div class="combo-bar-fill" style="width:${comboWidth}%"></div></div>
+    </div>
+    <div class="board-container"><div class="board">${boardHTML}</div></div>
+    <div class="pending-shapes">${shapesHTML}</div>
+    <div class="booster-bar">
+      <button class="booster-btn ${state.boosters.bomb <= 0 ? 'disabled' : ''}" onclick="useBomb()">
+        <span class="icon">💣</span><span class="name">炸弹</span><span class="count">×${state.boosters.bomb}</span>
+      </button>
+      <button class="booster-btn ${state.boosters.gravity <= 0 ? 'disabled' : ''}" onclick="useGravity()">
+        <span class="icon">⬇️</span><span class="name">重力</span><span class="count">×${state.boosters.gravity}</span>
+      </button>
+      <button class="booster-btn ${state.boosters.refresh <= 0 ? 'disabled' : ''}" onclick="useRefresh()">
+        <span class="icon">🔄</span><span class="name">刷新</span><span class="count">×${state.boosters.refresh}</span>
+      </button>
+    </div>
+    <div class="overlay ${state.gameStatus === 'gameOver' || state.gameStatus === 'reviving' ? 'visible' : ''}" id="gameOverlay">
+      <h3>游戏结束</h3>
+      <div class="go-score">${state.score}</div>
+      <div class="go-best">最高分：${state.bestScore}</div>
+      ${state.gameStatus === 'reviving' ? `<button class="btn-revive" onclick="handleRevive()">复活继续</button><div class="revive-timer">⏱ ${state.reviveTimer}s 内选择</div>` : ''}
+      <button class="btn-restart" onclick="handleRestart()">重新开始</button>
+    </div>
+    <div class="settings-overlay ${state.showSettings ? 'visible' : ''}" id="settingsOverlay">
+      <h3>设置</h3>
+      <div class="setting-row"><span>🎵 背景音乐</span><div class="toggle ${state.musicEnabled ? 'on' : ''}" onclick="toggleMusic()"></div></div>
+      <div class="setting-row"><span>🔊 游戏音效</span><div class="toggle ${state.sfxEnabled ? 'on' : ''}" onclick="toggleSfx()"></div></div>
+      <button class="btn-close-settings" onclick="closeSettings()">关闭</button>
+    </div>
+    <div class="toast" id="gameToast"></div>`;
+}
+
+// 游戏交互
+function startGame() {
+  state.errState = 'normal';
+  state.gameStatus = 'playing';
+  state.score = 0;
+  state.coins = 100;
+  state.comboCount = 0;
+  initBoard();
+  render();
+  showToast('游戏开始！');
+}
+
+function handleShapeClick(idx) {
+  if (state.pendingShapes[idx].used) return;
+  state.pendingShapes[idx].used = true;
+  state.score += 10;
+  // 模拟放置
+  const row = Math.floor(Math.random() * 5);
+  const col = Math.floor(Math.random() * 5);
+  const shape = state.pendingShapes[idx];
+  for (let r = 0; r < shape.matrix.length; r++) {
+    for (let c = 0; c < shape.matrix[0].length; c++) {
+      if (shape.matrix[r][c] && row+r < 8 && col+c < 8) {
+        state.board[row+r][col+c] = shape.color;
+      }
+    }
+  }
+  // 检查是否全部放完
+  if (state.pendingShapes.every(s => s.used)) {
+    state.pendingShapes = [
+      { matrix: [[1,1],[1,1]], color: Math.ceil(Math.random()*7), used: false },
+      { matrix: [[1,1,1]], color: Math.ceil(Math.random()*7), used: false },
+      { matrix: [[1],[1],[1]], color: Math.ceil(Math.random()*7), used: false }
+    ];
+  }
+  // 检查行消除
+  checkLineClear();
+  render();
+}
+
+function checkLineClear() {
+  let cleared = 0;
+  for (let r = 0; r < 8; r++) {
+    if (state.board[r].every(v => v > 0)) {
+      state.board[r] = Array(8).fill(0);
+      cleared++;
+    }
+  }
+  for (let c = 0; c < 8; c++) {
+    if (state.board.every(row => row[c] > 0)) {
+      state.board.forEach(row => row[c] = 0);
+      cleared++;
+    }
+  }
+  if (cleared > 0) {
+    state.comboCount++;
+    state.score += cleared * 10 * (1 + state.comboCount * 0.5);
+    state.coins += cleared * 5;
+    showToast(`消除 ${cleared} 行！Combo x${state.comboCount}`);
+  } else {
+    state.comboCount = 0;
+  }
+}
+
+function handleCellClick(r, c) {
+  if (state.board[r][c] > 0) {
+    showToast(`位置 (${r+1},${c+1}) 已有方块`);
+  }
+}
+
+function useBomb() {
+  if (state.boosters.bomb <= 0) { showToast('炸弹已用完'); return; }
+  if (state.coins < 120) { showToast('金币不足（需120）'); return; }
+  state.boosters.bomb--;
+  state.coins -= 120;
+  // 模拟清除中心区域
+  for (let r = 3; r < 6; r++) for (let c = 3; c < 6; c++) state.board[r][c] = 0;
+  showToast('💣 炸弹使用成功！');
+  render();
+}
+
+function useGravity() {
+  if (state.boosters.gravity <= 0) { showToast('重力道具已用完'); return; }
+  if (state.coins < 200) { showToast('金币不足（需200）'); return; }
+  state.boosters.gravity--;
+  state.coins -= 200;
+  // 模拟重力下落
+  for (let c = 0; c < 8; c++) {
+    let stack = [];
+    for (let r = 0; r < 8; r++) { if (state.board[r][c] > 0) stack.push(state.board[r][c]); }
+    for (let r = 0; r < 8; r++) { state.board[r][c] = r < 8 - stack.length ? 0 : stack[r - (8 - stack.length)]; }
+  }
+  checkLineClear();
+  showToast('⬇️ 重力执行成功！');
+  render();
+}
+
+function useRefresh() {
+  if (state.boosters.refresh <= 0) { showToast('刷新道具已用完'); return; }
+  if (state.coins < 150) { showToast('金币不足（需150）'); return; }
+  state.boosters.refresh--;
+  state.coins -= 150;
+  state.pendingShapes = [
+    { matrix: [[1,1,1,1,1]], color: Math.ceil(Math.random()*7), used: false },
+    { matrix: [[1,0],[1,1]], color: Math.ceil(Math.random()*7), used: false },
+    { matrix: [[1,1],[1,1]], color: Math.ceil(Math.random()*7), used: false }
+  ];
+  showToast('🔄 方块已刷新！');
+  render();
+}
+
+function handleRevive() {
+  state.gameStatus = 'playing';
+  // 清除底部2行
+  state.board[6] = Array(8).fill(0);
+  state.board[7] = Array(8).fill(0);
+  state.pendingShapes = [
+    { matrix: [[1,1]], color: Math.ceil(Math.random()*7), used: false },
+    { matrix: [[1],[1]], color: Math.ceil(Math.random()*7), used: false },
+    { matrix: [[1]], color: Math.ceil(Math.random()*7), used: false }
+  ];
+  showToast('复活成功！继续挑战');
+  render();
+}
+
+function handleRestart() {
+  state.gameStatus = 'playing';
+  state.score = 0;
+  state.coins = 100;
+  state.comboCount = 0;
+  state.boosters = { bomb: 3, gravity: 3, refresh: 3 };
+  state.pendingShapes = [
+    { matrix: [[1,1,1],[0,0,1],[0,0,0]], color: 3, used: false },
+    { matrix: [[1,1],[1,0]], color: 5, used: false },
+    { matrix: [[1],[1],[1],[1]], color: 7, used: false }
+  ];
+  initBoard();
+  render();
+  showToast('新游戏开始！');
+}
+
+function handleRetry() {
+  state.errState = 'normal';
+  handleRestart();
+}
+
+function openSettings() { state.showSettings = true; render(); }
+function closeSettings() { state.showSettings = false; render(); }
+function toggleMusic() { state.musicEnabled = !state.musicEnabled; render(); }
+function toggleSfx() { state.sfxEnabled = !state.sfxEnabled; render(); }
+
+// 初始化
+initBoard();
+render();
+</script>
+</body>
+</html>
