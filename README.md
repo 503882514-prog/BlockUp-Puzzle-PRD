@@ -4,17 +4,18 @@
 
 ## 在线预览
 
-- [交互原型](https://503882514-prog.github.io/BlockUp-Puzzle-PRD/BlockUp%20Puzzle-原型.html) - 左侧控制台 + 右侧 iPhone 手机原型
-- [综合评审页](https://503882514-prog.github.io/BlockUp-Puzzle-PRD/BlockUp%20Puzzle-综合评审页.html) - 三栏布局：切换台 / 手机原型 / PRD 文档
+- [首页导航](https://503882514-prog.github.io/BlockUp-Puzzle-PRD/) - 所有产出物入口
+- [交互原型](https://503882514-prog.github.io/BlockUp-Puzzle-PRD/prototype.html) - 左侧控制台 + 右侧 iPhone 手机原型
+- [综合评审页](https://503882514-prog.github.io/BlockUp-Puzzle-PRD/review.html) - 三栏布局：切换台 / 手机原型 / PRD 文档
 
 ## 交付物清单
 
 | 模块 | 文件 | 用途 |
 |------|------|------|
-| 模块 2 - PRD 文档 | [BlockUp Puzzle PRD.md](BlockUp%20Puzzle%20PRD.md) | 面向所有人的产品叙事文档 |
-| 模块 3 - AI 构建包 | [BlockUp Puzzle-AI构建包.md](BlockUp%20Puzzle-AI构建包.md) | 面向 AI 工具的结构化构建指令 |
-| 模块 1 - HTML 原型 | [BlockUp Puzzle-原型.html](BlockUp%20Puzzle-原型.html) | 可交互的单文件 HTML 原型 |
-| 综合评审页 | [BlockUp Puzzle-综合评审页.html](BlockUp%20Puzzle-综合评审页.html) | 原型 + PRD 合并评审页 |
+| 模块 2 - PRD 文档 | [prd.md](prd.md) | 面向所有人的产品叙事文档 |
+| 模块 3 - AI 构建包 | [ai-build-package.md](ai-build-package.md) | 面向 AI 工具的结构化构建指令 |
+| 模块 1 - HTML 原型 | [prototype.html](prototype.html) | 可交互的单文件 HTML 原型 |
+| 综合评审页 | [review.html](review.html) | 原型 + PRD 合并评审页 |
 
 ## 产品概要
 
