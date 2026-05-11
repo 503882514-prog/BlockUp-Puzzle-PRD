@@ -38,8 +38,8 @@
 
 | 字段名 | 类型 | 必填 | 取值约束 | 说明 |
 |---|---|---|---|---|
-| grid | array | 是 | 8×8 二维数组，每格值为 0（空）或 1-7（颜色编号） | 棋盘格子状态 |
-| size | number | 是 | 固定值 8 | 棋盘边长 |
+| grid | array | 是 | 10×10 二维数组，每格值为 0（空）或 1-7（颜色编号） | 棋盘格子状态 |
+| size | number | 是 | 固定值 10 | 棋盘边长 |
 
 ### 实体 · Shape
 
@@ -91,7 +91,7 @@
 - **写入的实体**：GameState, Board, PendingShapes, BoosterInventory
 - **主要区域**：
   - 顶部信息栏 · 显示当前分数、最高分、金币余额
-  - 棋盘区域 · 8×8 网格，显示已放置方块和拖拽预览
+  - 棋盘区域 · 10×10 网格，显示已放置方块和点选放置预览
   - 待放置方块区 · 底部展示 3 个待放置的方块形状
   - 道具栏 · 底部展示 3 种道具按钮及库存数量
   - 连击面板 · 连击时浮现连击数和进度条
@@ -208,15 +208,15 @@
 ### 规则 · 行列消除检测
 
 - **触发**：每次方块放置完成后；每次重力道具执行完成后
-- **输入**：Board.grid（8×8 二维数组）
+- **输入**：Board.grid（10×10 二维数组）
 - **判定逻辑**：
   ```
   completedLines = []
-  FOR row = 0 TO 7:
+  FOR row = 0 TO 9:
     IF Board.grid[row] 每格均不为 0:
       completedLines.add({type: "row", index: row})
-  FOR col = 0 TO 7:
-    IF Board.grid[0..7][col] 每格均不为 0:
+  FOR col = 0 TO 9:
+    IF Board.grid[0..9][col] 每格均不为 0:
       completedLines.add({type: "col", index: col})
   IF completedLines.length > 0:
     FOR EACH line IN completedLines:
